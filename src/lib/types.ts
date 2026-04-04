@@ -117,12 +117,34 @@ export interface BookingTransaction {
 
 export type MessageRole = "customer" | "agent" | "system";
 
+// Structured metadata attached to chat messages for rich UI rendering.
+// `content` always holds a plain-text version (for WhatsApp/WeChat fallback).
+// `metadata` holds structured data for web UI rendering (clickable cards, etc.).
+export type MessageMetadata =
+  | { type: "hotel_options"; options: HotelOptionCard[] }
+  | { type: "option_selected"; optionIndex: number; optionId: string }
+  | null;
+
+export interface HotelOptionCard {
+  optionId: string;
+  hotelName: string;
+  roomType: string;
+  pricePerNight: number;
+  totalPrice: number;
+  nights: number;
+  stars: number;
+  amenities: string[];
+  score: number;
+  explanation: string;
+}
+
 export interface ChatMessage {
   id: string;
   bookingId: string;
   role: MessageRole;
   content: string;
   timestamp: string;
+  metadata?: MessageMetadata;
 }
 
 // ===== Extraction Result =====

@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef, useCallback } from "react";
 import Header from "@/components/layout/Header";
-import { BookingRequest, ChatMessage } from "@/lib/types";
+import { BookingRequest, ChatMessage, HotelOptionCard } from "@/lib/types";
 import { cn, formatDateTime, statusLabel } from "@/lib/utils";
 import StatusBadge from "@/components/ui/StatusBadge";
 import {
@@ -16,6 +16,8 @@ import {
   Loader2,
   CheckCircle2,
   XCircle,
+  Star,
+  Check,
 } from "lucide-react";
 
 export default function ChatPage() {
@@ -66,10 +68,15 @@ export default function ChatPage() {
 
   const activeBooking = bookings.find((b) => b.id === activeBookingId);
 
-  async function handleSend() {
-    if (!input.trim() || !activeBookingId || sending) return;
+  // Are options still selectable? Only if booking is in options_presented state.
+  const optionsSelectable = activeBooking?.status === "options_presented" && !sending;
 
-    const content = input.trim();
+  async function handleSend(
+    content: string,
+    metadata?: { type: "option_selected"; optionIndex: number; optionId: string },
+  ) {
+    if (!content.trim() || !activeBookingId || sending) return;
+
     setInput("");
     setSending(true);
 
@@ -78,8 +85,9 @@ export default function ChatPage() {
       id: `temp-${Date.now()}`,
       bookingId: activeBookingId,
       role: "customer",
-      content,
+      content: content.trim(),
       timestamp: new Date().toISOString(),
+      metadata: metadata ?? undefined,
     };
     setMessages((prev) => [...prev, tempMsg]);
 
@@ -87,7 +95,11 @@ export default function ChatPage() {
       await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bookingId: activeBookingId, content }),
+        body: JSON.stringify({
+          bookingId: activeBookingId,
+          content: content.trim(),
+          metadata: metadata ?? undefined,
+        }),
       });
 
       // Reload messages to get all server-side messages (system + agent)
@@ -101,6 +113,19 @@ export default function ChatPage() {
     } finally {
       setSending(false);
     }
+  }
+
+  function handleTextSend() {
+    handleSend(input);
+  }
+
+  function handleOptionSelect(option: HotelOptionCard, index: number) {
+    if (!optionsSelectable) return;
+    // Send structured selection — deterministic, no LLM needed
+    handleSend(
+      `I'll take option ${index + 1}: ${option.hotelName} - ${option.roomType}`,
+      { type: "option_selected", optionIndex: index, optionId: option.optionId },
+    );
   }
 
   async function handleNewBooking() {
@@ -202,7 +227,6 @@ export default function ChatPage() {
                   </div>
                   <StatusBadge status={activeBooking.status} />
                 </div>
-                {/* Workflow stage indicator */}
                 {workflowStage && (
                   <div className="mt-2 flex items-center gap-2 text-xs">
                     <WorkflowProgress status={activeBooking.status} />
@@ -214,7 +238,12 @@ export default function ChatPage() {
               {/* Messages */}
               <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
                 {messages.map((msg) => (
-                  <MessageBubble key={msg.id} message={msg} />
+                  <MessageBubble
+                    key={msg.id}
+                    message={msg}
+                    onSelectOption={handleOptionSelect}
+                    optionsSelectable={optionsSelectable}
+                  />
                 ))}
 
                 {/* Typing indicator */}
@@ -240,19 +269,21 @@ export default function ChatPage() {
                     type="text"
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
+                    onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleTextSend()}
                     placeholder={
                       activeBooking.status === "confirmed"
                         ? "Booking confirmed!"
                         : activeBooking.status === "sent_to_hotel"
                           ? "Waiting for hotel confirmation..."
-                          : "Type customer message..."
+                          : activeBooking.status === "options_presented"
+                            ? "Click an option above, or type your preference..."
+                            : "Type customer message..."
                     }
                     className="flex-1 px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent"
                     disabled={sending || ["confirmed", "sent_to_hotel"].includes(activeBooking.status)}
                   />
                   <button
-                    onClick={handleSend}
+                    onClick={handleTextSend}
                     disabled={!input.trim() || sending || ["confirmed", "sent_to_hotel"].includes(activeBooking.status)}
                     className="px-4 py-2.5 bg-sky-500 text-white rounded-lg text-sm font-medium hover:bg-sky-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
                   >
@@ -302,7 +333,6 @@ export default function ChatPage() {
               />
               <DetailRow label="Special Requests" value={activeBooking.preferences.specialRequests} />
 
-              {/* Personal info checklist (visible during collecting_info) */}
               {["collecting_info", "filling_template", "sent_to_hotel", "confirmed"].includes(activeBooking.status) && (
                 <>
                   <hr className="border-gray-100" />
@@ -358,9 +388,120 @@ function WorkflowProgress({ status }: { status: string }) {
   );
 }
 
-// ─── Sub-components ─────────────────────────────────────────────────────────
+// ─── Hotel Option Card ──────────────────────────────────────────────────────
 
-function MessageBubble({ message }: { message: ChatMessage }) {
+function OptionCard({
+  option,
+  index,
+  onSelect,
+  selectable,
+}: {
+  option: HotelOptionCard;
+  index: number;
+  onSelect: (option: HotelOptionCard, index: number) => void;
+  selectable: boolean;
+}) {
+  const isTopPick = index === 0;
+
+  return (
+    <button
+      onClick={() => selectable && onSelect(option, index)}
+      disabled={!selectable}
+      className={cn(
+        "w-full text-left rounded-xl border-2 p-4 transition-all duration-200",
+        selectable
+          ? "cursor-pointer hover:border-sky-400 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0"
+          : "cursor-default opacity-75",
+        isTopPick && selectable
+          ? "border-sky-300 bg-sky-50/50"
+          : "border-gray-200 bg-white",
+      )}
+    >
+      {/* Header */}
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex items-center gap-2.5">
+          <span className={cn(
+            "w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold flex-shrink-0",
+            isTopPick ? "bg-sky-500 text-white" : "bg-gray-100 text-gray-600"
+          )}>
+            {index + 1}
+          </span>
+          <div>
+            <p className="text-sm font-semibold text-gray-900">{option.hotelName}</p>
+            <p className="text-xs text-gray-500">{option.roomType}</p>
+          </div>
+        </div>
+        <div className="text-right flex-shrink-0">
+          <p className="text-base font-bold text-gray-900">${option.pricePerNight}<span className="text-xs font-normal text-gray-400">/night</span></p>
+          <p className="text-xs text-gray-500">${option.totalPrice} total · {option.nights}n</p>
+        </div>
+      </div>
+
+      {/* Stars + Score */}
+      <div className="flex items-center gap-3 mt-2.5">
+        <div className="flex items-center gap-0.5">
+          {Array.from({ length: option.stars }).map((_, i) => (
+            <Star key={i} className="w-3 h-3 text-amber-400 fill-amber-400" />
+          ))}
+        </div>
+        <span className={cn(
+          "text-[10px] font-semibold px-1.5 py-0.5 rounded-full",
+          option.score >= 80 ? "bg-emerald-100 text-emerald-700" :
+          option.score >= 60 ? "bg-amber-100 text-amber-700" :
+          "bg-gray-100 text-gray-600"
+        )}>
+          {option.score}% match
+        </span>
+        {isTopPick && (
+          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-sky-100 text-sky-700">
+            Best Match
+          </span>
+        )}
+      </div>
+
+      {/* Amenities */}
+      <div className="flex flex-wrap gap-1 mt-2.5">
+        {option.amenities.slice(0, 5).map((a) => (
+          <span key={a} className="text-[10px] px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded">
+            {a}
+          </span>
+        ))}
+        {option.amenities.length > 5 && (
+          <span className="text-[10px] px-1.5 py-0.5 bg-gray-100 text-gray-400 rounded">
+            +{option.amenities.length - 5} more
+          </span>
+        )}
+      </div>
+
+      {/* Select button */}
+      {selectable && (
+        <div className={cn(
+          "mt-3 py-2 rounded-lg text-xs font-semibold text-center transition-colors",
+          isTopPick
+            ? "bg-sky-500 text-white"
+            : "bg-gray-100 text-gray-700 group-hover:bg-sky-500 group-hover:text-white"
+        )}>
+          <span className="flex items-center justify-center gap-1.5">
+            <Check className="w-3.5 h-3.5" />
+            Select This Option
+          </span>
+        </div>
+      )}
+    </button>
+  );
+}
+
+// ─── Message Bubble ─────────────────────────────────────────────────────────
+
+function MessageBubble({
+  message,
+  onSelectOption,
+  optionsSelectable,
+}: {
+  message: ChatMessage;
+  onSelectOption: (option: HotelOptionCard, index: number) => void;
+  optionsSelectable: boolean;
+}) {
   if (message.role === "system") {
     return (
       <div className="flex justify-center">
@@ -372,31 +513,71 @@ function MessageBubble({ message }: { message: ChatMessage }) {
   }
 
   const isCustomer = message.role === "customer";
+  const hasOptionCards = !isCustomer && message.metadata?.type === "hotel_options";
+
+  // Customer selection message — show as a compact confirmation
+  if (isCustomer && message.metadata?.type === "option_selected") {
+    return (
+      <div className="flex gap-3 justify-end">
+        <div className="bg-sky-500 text-white rounded-2xl rounded-br-md px-4 py-2.5 text-sm flex items-center gap-2">
+          <Check className="w-4 h-4" />
+          <span>{message.content}</span>
+        </div>
+        <div className="w-8 h-8 rounded-full bg-sky-100 flex items-center justify-center flex-shrink-0">
+          <User className="w-4 h-4 text-sky-600" />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={cn("flex gap-3", isCustomer ? "justify-end" : "justify-start")}>
       {!isCustomer && (
-        <div className="w-8 h-8 rounded-full bg-violet-100 flex items-center justify-center flex-shrink-0">
+        <div className="w-8 h-8 rounded-full bg-violet-100 flex items-center justify-center flex-shrink-0 mt-1">
           <Bot className="w-4 h-4 text-violet-600" />
         </div>
       )}
-      <div
-        className={cn(
-          "max-w-md px-4 py-2.5 rounded-2xl text-sm leading-relaxed",
-          isCustomer
-            ? "bg-sky-500 text-white rounded-br-md"
-            : "bg-white text-gray-800 border border-gray-200 rounded-bl-md"
+      <div className={cn("flex flex-col gap-3", isCustomer ? "items-end" : "items-start", hasOptionCards ? "max-w-lg" : "max-w-md")}>
+        {/* Text content — always shown (even with cards, as intro text) */}
+        {message.content && !hasOptionCards && (
+          <div
+            className={cn(
+              "px-4 py-2.5 rounded-2xl text-sm leading-relaxed",
+              isCustomer
+                ? "bg-sky-500 text-white rounded-br-md"
+                : "bg-white text-gray-800 border border-gray-200 rounded-bl-md"
+            )}
+          >
+            <p className="whitespace-pre-wrap">{message.content}</p>
+            <p className={cn("text-[10px] mt-1.5", isCustomer ? "text-sky-200" : "text-gray-400")}>
+              {formatDateTime(message.timestamp)}
+            </p>
+          </div>
         )}
-      >
-        <p className="whitespace-pre-wrap">{message.content}</p>
-        <p
-          className={cn(
-            "text-[10px] mt-1.5",
-            isCustomer ? "text-sky-200" : "text-gray-400"
-          )}
-        >
-          {formatDateTime(message.timestamp)}
-        </p>
+
+        {/* Option cards — rendered when metadata has hotel_options */}
+        {hasOptionCards && message.metadata?.type === "hotel_options" && (
+          <div className="w-full space-y-3">
+            {/* Brief intro above cards */}
+            <div className="bg-white text-gray-800 border border-gray-200 rounded-2xl rounded-bl-md px-4 py-2.5 text-sm">
+              <p>Here are the best options I found for you. {optionsSelectable ? "Click one to select it:" : ""}</p>
+              <p className={cn("text-[10px] mt-1.5 text-gray-400")}>
+                {formatDateTime(message.timestamp)}
+              </p>
+            </div>
+
+            {/* Cards */}
+            {message.metadata.options.map((opt, i) => (
+              <OptionCard
+                key={opt.optionId}
+                option={opt}
+                index={i}
+                onSelect={onSelectOption}
+                selectable={optionsSelectable}
+              />
+            ))}
+          </div>
+        )}
       </div>
       {isCustomer && (
         <div className="w-8 h-8 rounded-full bg-sky-100 flex items-center justify-center flex-shrink-0">
@@ -406,6 +587,8 @@ function MessageBubble({ message }: { message: ChatMessage }) {
     </div>
   );
 }
+
+// ─── Small components ───────────────────────────────────────────────────────
 
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (
