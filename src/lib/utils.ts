@@ -30,6 +30,7 @@ export function statusLabel(status: BookingStatus): string {
     matching: "Finding Hotels",
     options_presented: "Options Sent",
     selected: "Option Selected",
+    collecting_info: "Collecting Info",
     filling_template: "Filling Contract",
     sent_to_hotel: "Sent to Hotel",
     confirmed: "Confirmed",

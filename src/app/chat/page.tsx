@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import Header from "@/components/layout/Header";
 import { BookingRequest, ChatMessage } from "@/lib/types";
-import { cn, formatDateTime } from "@/lib/utils";
+import { cn, formatDateTime, statusLabel } from "@/lib/utils";
 import StatusBadge from "@/components/ui/StatusBadge";
 import {
   Send,
@@ -12,6 +12,10 @@ import {
   Bot,
   User,
   Info,
+  Cpu,
+  Loader2,
+  CheckCircle2,
+  XCircle,
 } from "lucide-react";
 
 export default function ChatPage() {
@@ -20,19 +24,32 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
+  const [llmStatus, setLlmStatus] = useState<{ ok: boolean; model: string } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Load bookings
+  // Check LLM status on mount
   useEffect(() => {
-    fetch("/api/bookings")
+    fetch("/api/llm")
       .then((r) => r.json())
-      .then((data: BookingRequest[]) => {
-        setBookings(data);
-        if (data.length > 0 && !activeBookingId) {
-          setActiveBookingId(data[data.length - 1].id);
-        }
-      });
-  }, [activeBookingId]);
+      .then(setLlmStatus)
+      .catch(() => setLlmStatus({ ok: false, model: "unknown" }));
+  }, []);
+
+  // Load bookings
+  const refreshBookings = useCallback(async () => {
+    const res = await fetch("/api/bookings");
+    const data: BookingRequest[] = await res.json();
+    setBookings(data);
+    return data;
+  }, []);
+
+  useEffect(() => {
+    refreshBookings().then((data) => {
+      if (data.length > 0 && !activeBookingId) {
+        setActiveBookingId(data[data.length - 1].id);
+      }
+    });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Load messages when booking changes
   useEffect(() => {
@@ -56,7 +73,7 @@ export default function ChatPage() {
     setInput("");
     setSending(true);
 
-    // Optimistic update
+    // Optimistic update — show customer message immediately
     const tempMsg: ChatMessage = {
       id: `temp-${Date.now()}`,
       bookingId: activeBookingId,
@@ -67,21 +84,18 @@ export default function ChatPage() {
     setMessages((prev) => [...prev, tempMsg]);
 
     try {
-      const res = await fetch("/api/chat", {
+      await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ bookingId: activeBookingId, content }),
       });
-      const data = await res.json();
 
-      // Reload messages to get server-side messages including system
+      // Reload messages to get all server-side messages (system + agent)
       const msgRes = await fetch(`/api/chat?bookingId=${activeBookingId}`);
-      const allMsgs = await msgRes.json();
-      setMessages(allMsgs);
+      setMessages(await msgRes.json());
 
       // Reload bookings to update status
-      const bkRes = await fetch("/api/bookings");
-      setBookings(await bkRes.json());
+      await refreshBookings();
     } catch {
       // On error, keep the optimistic message
     } finally {
@@ -99,20 +113,12 @@ export default function ChatPage() {
     setBookings((prev) => [...prev, newBooking]);
     setActiveBookingId(newBooking.id);
     setMessages([]);
-
-    // Add welcome message
-    const welcomeRes = await fetch("/api/chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        bookingId: newBooking.id,
-        content: "Hi, I need to book a hotel.",
-      }),
-    });
-
-    const msgRes = await fetch(`/api/chat?bookingId=${newBooking.id}`);
-    setMessages(await msgRes.json());
   }
+
+  // Workflow stage display
+  const workflowStage = activeBooking
+    ? WORKFLOW_STAGES[activeBooking.status] || { label: statusLabel(activeBooking.status), description: "" }
+    : null;
 
   return (
     <div className="h-screen flex flex-col">
@@ -121,7 +127,7 @@ export default function ChatPage() {
       <div className="flex flex-1 overflow-hidden">
         {/* Conversation list */}
         <div className="w-72 bg-white border-r border-gray-200 flex flex-col">
-          <div className="p-3 border-b border-gray-100">
+          <div className="p-3 border-b border-gray-100 space-y-2">
             <button
               onClick={handleNewBooking}
               className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-sky-500 text-white rounded-lg text-sm font-medium hover:bg-sky-600 transition-colors"
@@ -129,6 +135,24 @@ export default function ChatPage() {
               <Plus className="w-4 h-4" />
               New Booking
             </button>
+
+            {/* LLM Status */}
+            <div className="flex items-center gap-2 px-2 py-1.5 text-xs">
+              <Cpu className="w-3 h-3 text-gray-400" />
+              {llmStatus === null ? (
+                <span className="text-gray-400">Checking LLM...</span>
+              ) : llmStatus.ok ? (
+                <>
+                  <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+                  <span className="text-emerald-600">{llmStatus.model}</span>
+                </>
+              ) : (
+                <>
+                  <XCircle className="w-3 h-3 text-red-400" />
+                  <span className="text-red-500">LLM offline</span>
+                </>
+              )}
+            </div>
           </div>
           <div className="flex-1 overflow-y-auto">
             {bookings.map((b) => (
@@ -160,22 +184,31 @@ export default function ChatPage() {
         <div className="flex-1 flex flex-col bg-gray-50">
           {activeBooking ? (
             <>
-              {/* Chat header */}
-              <div className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-full bg-sky-100 flex items-center justify-center">
-                    <User className="w-4 h-4 text-sky-600" />
+              {/* Chat header with workflow stage */}
+              <div className="bg-white border-b border-gray-200 px-6 py-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-full bg-sky-100 flex items-center justify-center">
+                      <User className="w-4 h-4 text-sky-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-gray-900">
+                        {activeBooking.customer.name || "New Customer"}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        {activeBooking.travel.destination || "Pending destination"} · {activeBooking.id}
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-sm font-semibold text-gray-900">
-                      {activeBooking.customer.name || "New Customer"}
-                    </p>
-                    <p className="text-xs text-gray-500">
-                      {activeBooking.travel.destination || "Pending destination"} · {activeBooking.id}
-                    </p>
-                  </div>
+                  <StatusBadge status={activeBooking.status} />
                 </div>
-                <StatusBadge status={activeBooking.status} />
+                {/* Workflow stage indicator */}
+                {workflowStage && (
+                  <div className="mt-2 flex items-center gap-2 text-xs">
+                    <WorkflowProgress status={activeBooking.status} />
+                    <span className="text-gray-500">{workflowStage.description}</span>
+                  </div>
+                )}
               </div>
 
               {/* Messages */}
@@ -183,6 +216,20 @@ export default function ChatPage() {
                 {messages.map((msg) => (
                   <MessageBubble key={msg.id} message={msg} />
                 ))}
+
+                {/* Typing indicator */}
+                {sending && (
+                  <div className="flex gap-3 justify-start">
+                    <div className="w-8 h-8 rounded-full bg-violet-100 flex items-center justify-center flex-shrink-0">
+                      <Bot className="w-4 h-4 text-violet-600" />
+                    </div>
+                    <div className="bg-white text-gray-400 border border-gray-200 rounded-2xl rounded-bl-md px-4 py-3 text-sm flex items-center gap-2">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Thinking...
+                    </div>
+                  </div>
+                )}
+
                 <div ref={messagesEndRef} />
               </div>
 
@@ -193,17 +240,27 @@ export default function ChatPage() {
                     type="text"
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && handleSend()}
-                    placeholder="Type customer message..."
+                    onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
+                    placeholder={
+                      activeBooking.status === "confirmed"
+                        ? "Booking confirmed!"
+                        : activeBooking.status === "sent_to_hotel"
+                          ? "Waiting for hotel confirmation..."
+                          : "Type customer message..."
+                    }
                     className="flex-1 px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent"
-                    disabled={sending}
+                    disabled={sending || ["confirmed", "sent_to_hotel"].includes(activeBooking.status)}
                   />
                   <button
                     onClick={handleSend}
-                    disabled={!input.trim() || sending}
+                    disabled={!input.trim() || sending || ["confirmed", "sent_to_hotel"].includes(activeBooking.status)}
                     className="px-4 py-2.5 bg-sky-500 text-white rounded-lg text-sm font-medium hover:bg-sky-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
                   >
-                    <Send className="w-4 h-4" />
+                    {sending ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Send className="w-4 h-4" />
+                    )}
                     Send
                   </button>
                 </div>
@@ -231,6 +288,7 @@ export default function ChatPage() {
               <DetailRow label="Passport" value={activeBooking.customer.passport} />
               <DetailRow label="Email" value={activeBooking.customer.email} />
               <DetailRow label="Phone" value={activeBooking.customer.phone} />
+              <DetailRow label="Nationality" value={activeBooking.customer.nationality} />
               <hr className="border-gray-100" />
               <DetailRow label="Destination" value={activeBooking.travel.destination} />
               <DetailRow label="Check-in" value={activeBooking.travel.checkIn} />
@@ -243,6 +301,21 @@ export default function ChatPage() {
                 value={activeBooking.preferences.maxBudgetPerNight ? `$${activeBooking.preferences.maxBudgetPerNight}/night` : ""}
               />
               <DetailRow label="Special Requests" value={activeBooking.preferences.specialRequests} />
+
+              {/* Personal info checklist (visible during collecting_info) */}
+              {["collecting_info", "filling_template", "sent_to_hotel", "confirmed"].includes(activeBooking.status) && (
+                <>
+                  <hr className="border-gray-100" />
+                  <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                    Personal Info Checklist
+                  </h4>
+                  <ChecklistItem label="Full Name" value={activeBooking.customer.name} />
+                  <ChecklistItem label="Passport" value={activeBooking.customer.passport} />
+                  <ChecklistItem label="Nationality" value={activeBooking.customer.nationality} />
+                  <ChecklistItem label="Email" value={activeBooking.customer.email} />
+                  <ChecklistItem label="Phone" value={activeBooking.customer.phone} />
+                </>
+              )}
             </div>
           </div>
         )}
@@ -251,11 +324,47 @@ export default function ChatPage() {
   );
 }
 
+// ─── Workflow stages config ─────────────────────────────────────────────────
+
+const WORKFLOW_STAGES: Record<string, { label: string; description: string; step: number }> = {
+  intake: { label: "Intake", description: "Waiting for customer to describe their needs", step: 1 },
+  extracting: { label: "Collecting Preferences", description: "Gathering destination, dates, budget...", step: 2 },
+  matching: { label: "Searching", description: "Finding matching hotels...", step: 3 },
+  options_presented: { label: "Options Sent", description: "Waiting for customer to select an option", step: 4 },
+  selected: { label: "Selected", description: "Customer chose a hotel", step: 5 },
+  collecting_info: { label: "Info Collection", description: "Gathering passport, name, contact details...", step: 5 },
+  filling_template: { label: "Processing", description: "Generating reservation document...", step: 6 },
+  sent_to_hotel: { label: "Sent", description: "Reservation sent, awaiting hotel confirmation", step: 7 },
+  confirmed: { label: "Confirmed", description: "Booking confirmed by hotel!", step: 8 },
+};
+
+const TOTAL_STEPS = 8;
+
+function WorkflowProgress({ status }: { status: string }) {
+  const stage = WORKFLOW_STAGES[status];
+  if (!stage) return null;
+  const pct = Math.round((stage.step / TOTAL_STEPS) * 100);
+
+  return (
+    <div className="flex items-center gap-2">
+      <div className="w-24 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+        <div
+          className="h-full bg-sky-500 rounded-full transition-all duration-500"
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      <span className="text-gray-500 font-medium">{stage.label}</span>
+    </div>
+  );
+}
+
+// ─── Sub-components ─────────────────────────────────────────────────────────
+
 function MessageBubble({ message }: { message: ChatMessage }) {
   if (message.role === "system") {
     return (
       <div className="flex justify-center">
-        <div className="bg-gray-100 text-gray-500 text-xs px-3 py-1.5 rounded-full">
+        <div className="bg-gray-100 text-gray-500 text-xs px-3 py-1.5 rounded-full max-w-md text-center">
           {message.content}
         </div>
       </div>
@@ -303,6 +412,22 @@ function DetailRow({ label, value }: { label: string; value: string }) {
     <div>
       <p className="text-xs text-gray-400">{label}</p>
       <p className="text-gray-800 font-medium">{value || "—"}</p>
+    </div>
+  );
+}
+
+function ChecklistItem({ label, value }: { label: string; value: string }) {
+  const filled = Boolean(value);
+  return (
+    <div className="flex items-center gap-2">
+      {filled ? (
+        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" />
+      ) : (
+        <div className="w-3.5 h-3.5 rounded-full border-2 border-gray-300 flex-shrink-0" />
+      )}
+      <span className={cn("text-xs", filled ? "text-gray-800" : "text-gray-400")}>
+        {label}: {filled ? value : "missing"}
+      </span>
     </div>
   );
 }

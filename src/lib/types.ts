@@ -6,6 +6,7 @@ export type BookingStatus =
   | "matching"
   | "options_presented"
   | "selected"
+  | "collecting_info"
   | "filling_template"
   | "sent_to_hotel"
   | "confirmed"

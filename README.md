@@ -1,36 +1,123 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Operon
 
-## Getting Started
+An AI operations layer for travel agencies that automates hotel booking workflows through intelligent planning and execution.
 
-First, run the development server:
+Operon uses a locally running LLM (llama3.2:3b via Ollama) to handle the full booking lifecycle: collecting customer preferences through natural chat, searching contracted hotel pools, presenting options, gathering personal details via checklist, and dispatching reservation documents to hotels.
+
+## Prerequisites
+
+- **Node.js** >= 18
+- **npm** >= 9
+- **macOS** (Ollama install below uses Homebrew; see [ollama.com](https://ollama.com) for other platforms)
+
+## Setup
+
+### 1. Clone and install dependencies
+
+```bash
+git clone <repo-url> && cd Operon
+npm install
+```
+
+### 2. Install Ollama and pull the LLM
+
+```bash
+# Install Ollama
+brew install ollama
+
+# Start the Ollama background service
+brew services start ollama
+
+# Pull the llama3.2 3B model (~2 GB download)
+ollama pull llama3.2:3b
+```
+
+Verify the model is running:
+
+```bash
+ollama list
+# Should show: llama3.2:3b
+```
+
+### 3. Run the development server
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Pages
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Route | Description |
+|---|---|
+| `/` | Dashboard with booking pipeline, stats, and recent bookings |
+| `/chat` | Chat UI for handling customer conversations with LLM-driven workflow |
+| `/bookings` | Booking list with search and status filters |
+| `/bookings/[id]` | Booking detail with customer info, hotel options, and contract preview |
+| `/hotels` | Contracted hotel catalog with room types and pricing |
 
-## Learn More
+## Booking Workflow
 
-To learn more about Next.js, take a look at the following resources:
+The chat-driven workflow progresses through these stages automatically:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+1. **Collecting Preferences** — LLM extracts destination, dates, guests, budget, room type from natural conversation
+2. **Hotel Matching** — Rule-based search filters the contracted hotel pool, LLM presents results conversationally
+3. **Option Selection** — LLM parses customer's choice (supports negotiation and rejection)
+4. **Personal Info Collection** — Checklist-driven: LLM asks for name, passport, nationality, email, phone
+5. **PDF Generation & Dispatch** — Dummy PDF created, dummy email sent to hotel (replace with real services)
+6. **Confirmation** — Simulated hotel confirmation (replace with real webhook/polling)
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Project Structure
 
-## Deploy on Vercel
+```
+src/
+  app/
+    page.tsx                   # Dashboard
+    chat/page.tsx              # Chat UI
+    bookings/page.tsx          # Booking list
+    bookings/[id]/page.tsx     # Booking detail
+    hotels/page.tsx            # Hotel catalog
+    api/
+      bookings/route.ts        # Booking CRUD
+      chat/route.ts            # Chat + workflow orchestration
+      hotels/route.ts          # Hotel pool
+      matching/route.ts        # Hotel matching
+      templates/route.ts       # Contract template fill
+      dispatch/route.ts        # Reservation dispatch
+      llm/route.ts             # LLM health check
+  components/
+    layout/                    # Sidebar, Header
+    ui/                        # StatusBadge
+  lib/
+    types.ts                   # Data models
+    mock-data.ts               # Sample hotels, bookings, messages
+    store.ts                   # In-memory store (replace with DB)
+    utils.ts                   # Formatting helpers
+    services/
+      llm.ts                   # Ollama client with 6 optimized prompts
+      workflow.ts              # Booking state machine
+      matching.ts              # Hotel filtering + scoring
+      extraction.ts            # Regex-based extraction (legacy fallback)
+      template.ts              # Contract template selection + fill
+      dispatch.ts              # Reservation send + confirmation
+      pdf-dummy.ts             # Dummy PDF generation + email
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Environment Variables (optional)
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+| Variable | Default | Description |
+|---|---|---|
+| `OLLAMA_URL` | `http://localhost:11434` | Ollama API endpoint |
+| `OLLAMA_MODEL` | `llama3.2:3b` | Model to use for inference |
+
+## Integration Points
+
+The following are currently mocked and ready for real service integration:
+
+- **PDF generation** — `src/lib/services/pdf-dummy.ts` (swap in pdf-lib or puppeteer)
+- **Email dispatch** — same file (swap in nodemailer or SendGrid)
+- **Hotel confirmation** — auto-simulated in `workflow.ts` (swap in webhook/polling)
+- **Database** — `src/lib/store.ts` is an in-memory singleton (swap in SQLite/PostgreSQL)
+- **Chat channels** — currently web-only (integrate WhatsApp/WeChat APIs)
+- **LLM provider** — currently local Ollama (can swap to Claude API or other providers)
