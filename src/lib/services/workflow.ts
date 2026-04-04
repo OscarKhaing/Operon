@@ -18,7 +18,8 @@ import {
   extractPersonalInfo,
   generateChecklistReply,
 } from "./llm";
-import { generateAndSendPdf } from "./pdf-dummy";
+import { generateDummyPdf } from "./pdf-dummy";
+import { sendReservationEmail } from "./email";
 import { v4 as uuid } from "uuid";
 
 /**
@@ -317,14 +318,16 @@ async function handleCollectingInfo(
   return text(reply);
 }
 
-// ─── Dispatch: dummy PDF + dummy email ──────────────────────────────────────
+// ─── Dispatch: dummy PDF + real email via Resend ────────────────────────────
 
 async function triggerDispatch(bookingId: string, option: BookingOption): Promise<WorkflowResult> {
   const booking = store.getBooking(bookingId)!;
   const hotel = store.getHotel(option.hotelId);
+  const hotelEmail = hotel?.contactEmail || "hotel@example.com";
 
-  // Generate dummy PDF and send dummy email
-  const pdfResult = generateAndSendPdf({
+  // 1. Generate dummy PDF (replace with real PDF generation later)
+  const pdfResult = generateDummyPdf({
+    bookingId,
     guestName: booking.customer.name,
     passport: booking.customer.passport,
     nationality: booking.customer.nationality,
@@ -336,24 +339,53 @@ async function triggerDispatch(bookingId: string, option: BookingOption): Promis
     checkOut: booking.travel.checkOut,
     guestCount: booking.travel.guestCount,
     totalPrice: option.totalPrice,
-    hotelEmail: hotel?.contactEmail || "hotel@example.com",
+    hotelEmail,
+    specialRequests: booking.preferences.specialRequests,
   });
 
+  store.updateBooking(bookingId, { pdfUrl: pdfResult.pdfPath });
   addMsg(bookingId, "system", `PDF generated: ${pdfResult.pdfPath}`);
-  addMsg(bookingId, "system", `Email sent to ${pdfResult.sentTo} — ${pdfResult.emailStatus}`);
 
-  // Simulate hotel confirmation (auto-confirm after "sending")
+  // 2. Send reservation email to hotel via Resend
+  const emailResult = await sendReservationEmail({
+    hotelEmail,
+    hotelName: option.hotelName,
+    guestName: booking.customer.name,
+    passport: booking.customer.passport,
+    nationality: booking.customer.nationality,
+    guestEmail: booking.customer.email,
+    guestPhone: booking.customer.phone,
+    roomType: option.roomType.name,
+    checkIn: booking.travel.checkIn,
+    checkOut: booking.travel.checkOut,
+    guestCount: booking.travel.guestCount,
+    totalPrice: option.totalPrice,
+    currency: booking.preferences.currency || "USD",
+    specialRequests: booking.preferences.specialRequests,
+  });
+
+  if (emailResult.success) {
+    addMsg(bookingId, "system", `Email sent to ${emailResult.sentTo} via Resend (ID: ${emailResult.emailId})`);
+  } else {
+    addMsg(bookingId, "system", `Email to ${emailResult.sentTo} failed: ${emailResult.error}`);
+  }
+
+  // 3. Update booking status
   store.updateBooking(bookingId, { status: "sent_to_hotel" });
 
-  // Auto-simulate confirmation
+  // 4. Auto-simulate hotel confirmation (replace with real webhook/polling later)
   setTimeout(() => {
     const code = `CONF-${Date.now().toString(36).toUpperCase()}`;
     store.updateBooking(bookingId, { status: "confirmed" });
     addMsg(bookingId, "system", `Hotel confirmed! Code: ${code}`);
   }, 2000);
 
+  const emailNote = emailResult.success
+    ? `I've sent the reservation details to **${option.hotelName}** (${hotelEmail}).`
+    : `I prepared the reservation for **${option.hotelName}**, but the email couldn't be delivered right now. Our team will follow up manually.`;
+
   return text(
-    `All set! I've prepared your reservation document and sent it to **${option.hotelName}** (${hotel?.contactEmail}).\n\nHere's a summary:\n- Guest: ${booking.customer.name}\n- Hotel: ${option.hotelName} - ${option.roomType.name}\n- Dates: ${booking.travel.checkIn} to ${booking.travel.checkOut}\n- Total: $${option.totalPrice}\n\nThe hotel will confirm shortly. I'll notify you once confirmed!`
+    `All set! ${emailNote}\n\nHere's a summary:\n- Guest: ${booking.customer.name}\n- Hotel: ${option.hotelName} - ${option.roomType.name}\n- Dates: ${booking.travel.checkIn} to ${booking.travel.checkOut}\n- Total: $${option.totalPrice}\n\nThe hotel will confirm shortly. I'll notify you once confirmed!`
   );
 }
 

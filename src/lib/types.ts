@@ -42,6 +42,7 @@ export interface BookingRequest {
   preferences: Preferences;
   status: BookingStatus;
   assignedTo: string; // operator name
+  pdfUrl?: string; // URL to generated reservation PDF
   createdAt: string;
   updatedAt: string;
 }

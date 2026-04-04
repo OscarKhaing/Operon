@@ -70,10 +70,10 @@ Available destinations in our hotel pool: Singapore, Tokyo, Shanghai, Phuket, Se
 Available room types: standard, deluxe, suite.
 
 Rules:
-- Output ONLY a JSON object, nothing else.
-- Use null for any field not mentioned.
+- Output ONLY a JSON object, nothing else. No explanation.
+- Use null for any field not mentioned at all.
 - Dates must be YYYY-MM-DD format. If the year is not stated, assume 2026.
-- For guestCount, default to null if unclear (do NOT guess).
+- For guestCount, extract the number of people/guests/persons. "2 guests", "two people", "for 2", "myself" (=1) all count. Only use null if truly never mentioned.
 - For maxBudget, extract the per-night number only. Output as integer.
 - For roomType, normalize to one of: standard, deluxe, suite.
 - For destination, normalize to the exact city name from the list above.`;

@@ -1,10 +1,11 @@
 /**
- * Dummy PDF generation and email dispatch.
- * Replace with real PDF generation (e.g., puppeteer, pdf-lib) and
- * real email sending (e.g., nodemailer, SendGrid) in production.
+ * Dummy PDF generation.
+ * Replace with real PDF generation (e.g., puppeteer, pdf-lib) in production.
+ * Email dispatch has moved to email.ts (Resend).
  */
 
 export interface PdfInput {
+  bookingId?: string; // used to construct the PDF URL
   guestName: string;
   passport: string;
   nationality: string;
@@ -17,6 +18,7 @@ export interface PdfInput {
   guestCount: number;
   totalPrice: number;
   hotelEmail: string;
+  specialRequests?: string;
 }
 
 export interface PdfResult {
@@ -27,19 +29,16 @@ export interface PdfResult {
 }
 
 /**
- * Simulates:
- * 1. Generating a reservation PDF with the given fields
- * 2. Sending it as an email attachment to the hotel
- *
- * Returns dummy paths and confirmation.
+ * Generates a dummy PDF path for the reservation.
+ * In production: use pdf-lib or puppeteer to create a real PDF.
  */
-export function generateAndSendPdf(input: PdfInput): PdfResult {
+export function generateDummyPdf(input: PdfInput): PdfResult {
   const timestamp = new Date().toISOString();
   const fileId = Date.now().toString(36);
 
-  // ── Dummy PDF generation ──────────────────────────────────
-  // In production: use pdf-lib or puppeteer to fill a real template
-  const pdfPath = `/tmp/reservations/reservation-${fileId}.pdf`;
+  const pdfPath = input.bookingId
+    ? `/api/pdf/${input.bookingId}`
+    : `/api/pdf/unknown-${fileId}`;
 
   console.log("=== DUMMY PDF GENERATED ===");
   console.log(`Path: ${pdfPath}`);
@@ -50,18 +49,10 @@ export function generateAndSendPdf(input: PdfInput): PdfResult {
   console.log(`Total: $${input.totalPrice}`);
   console.log("===========================");
 
-  // ── Dummy email send ──────────────────────────────────────
-  // In production: use nodemailer/SendGrid to send the PDF
-  console.log("=== DUMMY EMAIL SENT ===");
-  console.log(`To: ${input.hotelEmail}`);
-  console.log(`Subject: Reservation Request — ${input.guestName} — ${input.checkIn} to ${input.checkOut}`);
-  console.log(`Attachment: ${pdfPath}`);
-  console.log("========================");
-
   return {
     pdfPath,
     sentTo: input.hotelEmail,
-    emailStatus: "sent (simulated)",
+    emailStatus: "pending (pdf only — email handled by Resend)",
     timestamp,
   };
 }

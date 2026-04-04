@@ -17,6 +17,7 @@ import {
   Send,
   CheckCircle2,
   MessageSquare,
+  Download,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -322,6 +323,38 @@ export default function BookingDetailPage() {
                   )
                 )}
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Reservation PDF */}
+        {booking.pdfUrl && (
+          <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-5 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <FileText className="w-5 h-5 text-indigo-500" />
+              <div>
+                <p className="text-sm font-medium text-indigo-900">Reservation Document</p>
+                <p className="text-xs text-indigo-600">PDF generated and ready for download</p>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <a
+                href={booking.pdfUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-4 py-2 bg-indigo-500 text-white rounded-lg text-sm font-medium hover:bg-indigo-600 transition-colors flex items-center gap-2"
+              >
+                <FileText className="w-4 h-4" />
+                View PDF
+              </a>
+              <a
+                href={booking.pdfUrl}
+                download={`reservation-${booking.id}.pdf`}
+                className="px-4 py-2 bg-white border border-indigo-300 text-indigo-700 rounded-lg text-sm font-medium hover:bg-indigo-50 transition-colors flex items-center gap-2"
+              >
+                <Download className="w-4 h-4" />
+                Download
+              </a>
             </div>
           </div>
         )}
