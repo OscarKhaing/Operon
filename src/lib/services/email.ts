@@ -6,6 +6,9 @@ import { Resend } from "resend";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 const FROM = process.env.RESEND_FROM || "onboarding@resend.dev";
+// Override: route all emails to a test inbox during development.
+// Remove this or set to "" in production to send to actual hotel emails.
+const TEST_RECIPIENT = process.env.RESEND_TEST_RECIPIENT || "akhaing@ucsd.edu";
 
 export interface ReservationEmailInput {
   hotelEmail: string;
@@ -123,10 +126,14 @@ export async function sendReservationEmail(input: ReservationEmailInput): Promis
   const subject = `Reservation Request — ${input.guestName} — ${input.checkIn} to ${input.checkOut}`;
 
   try {
+    const recipient = TEST_RECIPIENT || input.hotelEmail;
+
     const { data, error } = await resend.emails.send({
       from: FROM,
-      to: input.hotelEmail,
-      subject,
+      to: recipient,
+      subject: TEST_RECIPIENT
+        ? `[TEST → ${input.hotelEmail}] ${subject}`
+        : subject,
       html: buildReservationHtml(input),
     });
 
@@ -141,7 +148,7 @@ export async function sendReservationEmail(input: ReservationEmailInput): Promis
       };
     }
 
-    console.log(`Email sent via Resend: ${data?.id} → ${input.hotelEmail}`);
+    console.log(`Email sent via Resend: ${data?.id} → ${recipient}${TEST_RECIPIENT ? ` (intended for ${input.hotelEmail})` : ""}`);
     return {
       success: true,
       emailId: data?.id ?? null,

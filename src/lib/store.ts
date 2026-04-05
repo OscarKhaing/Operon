@@ -94,9 +94,19 @@ class Store {
     this.options.push(...options);
   }
 
+  // ----- Options -----
+  clearOptions(bookingId: string): void {
+    this.options = this.options.filter((o) => o.bookingId !== bookingId);
+  }
+
   // ----- Transactions -----
   getTransaction(bookingId: string): BookingTransaction | undefined {
     return this.transactions.find((t) => t.bookingId === bookingId);
+  }
+
+  getLatestTransaction(bookingId: string): BookingTransaction | undefined {
+    const txs = this.transactions.filter((t) => t.bookingId === bookingId);
+    return txs[txs.length - 1];
   }
 
   createTransaction(tx: BookingTransaction): BookingTransaction {

@@ -15,15 +15,36 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   const body = await req.json();
-  const { bookingId, content, metadata } = body as {
+  const { bookingId, content, metadata, role } = body as {
     bookingId: string;
     content: string;
     metadata?: MessageMetadata;
+    role?: "customer" | "agent";
   };
 
   if (!bookingId || !content) {
     return NextResponse.json({ error: "bookingId and content required" }, { status: 400 });
   }
+
+  // ── Agent mode: operator types directly as agent, bypasses workflow ──
+  if (role === "agent") {
+    const agentMsg: ChatMessage = {
+      id: uuid(),
+      bookingId,
+      role: "agent",
+      content,
+      timestamp: new Date().toISOString(),
+    };
+    store.addMessage(agentMsg);
+
+    const booking = store.getBooking(bookingId);
+    return NextResponse.json({
+      agentMessage: agentMsg,
+      bookingStatus: booking?.status,
+    });
+  }
+
+  // ── Normal customer message flow ──
 
   // Save customer message (with metadata if present, e.g. option_selected)
   const customerMsg: ChatMessage = {

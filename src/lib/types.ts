@@ -43,6 +43,7 @@ export interface BookingRequest {
   status: BookingStatus;
   assignedTo: string; // operator name
   pdfUrl?: string; // URL to generated reservation PDF
+  rejectedOptionIds?: string[]; // options rejected by hotels (no availability)
   createdAt: string;
   updatedAt: string;
 }
@@ -112,6 +113,9 @@ export interface BookingTransaction {
   confirmedAt: string | null;
   confirmationCode: string | null;
   status: "pending" | "sent" | "confirmed" | "rejected";
+  hotelResponseType?: "confirmed" | "more_info_needed" | "no_availability";
+  hotelMessage?: string;
+  retryCount?: number;
 }
 
 // ===== Chat =====
@@ -124,6 +128,7 @@ export type MessageRole = "customer" | "agent" | "system";
 export type MessageMetadata =
   | { type: "hotel_options"; options: HotelOptionCard[] }
   | { type: "option_selected"; optionIndex: number; optionId: string }
+  | { type: "hotel_response"; responseType: "confirmed" | "more_info_needed" | "no_availability"; message: string }
   | null;
 
 export interface HotelOptionCard {

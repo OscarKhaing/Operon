@@ -10,8 +10,15 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Booking not found" }, { status: 404 });
   }
 
+  // Clear previous options before re-matching
+  store.clearOptions(bookingId);
+
   const options = findOptions(booking);
   store.addOptions(options);
+
+  if (options.length > 0) {
+    store.updateBooking(bookingId, { status: "options_presented" });
+  }
 
   return NextResponse.json({ options });
 }

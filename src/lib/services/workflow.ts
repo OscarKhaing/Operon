@@ -20,6 +20,7 @@ import {
 } from "./llm";
 import { generateDummyPdf } from "./pdf-dummy";
 import { sendReservationEmail } from "./email";
+import { simulateHotelResponse } from "./hotel-response";
 import { v4 as uuid } from "uuid";
 
 /**
@@ -370,15 +371,21 @@ async function triggerDispatch(bookingId: string, option: BookingOption): Promis
     addMsg(bookingId, "system", `Email to ${emailResult.sentTo} failed: ${emailResult.error}`);
   }
 
-  // 3. Update booking status
+  // 3. Create transaction record and update booking status
+  store.createTransaction({
+    id: uuid(),
+    bookingId,
+    selectedOptionId: option.id,
+    documentUrl: pdfResult.pdfPath,
+    sentAt: new Date().toISOString(),
+    confirmedAt: null,
+    confirmationCode: null,
+    status: "sent",
+  });
   store.updateBooking(bookingId, { status: "sent_to_hotel" });
 
-  // 4. Auto-simulate hotel confirmation (replace with real webhook/polling later)
-  setTimeout(() => {
-    const code = `CONF-${Date.now().toString(36).toUpperCase()}`;
-    store.updateBooking(bookingId, { status: "confirmed" });
-    addMsg(bookingId, "system", `Hotel confirmed! Code: ${code}`);
-  }, 2000);
+  // 4. Simulate hotel response (confirmed / more info needed / no availability)
+  simulateHotelResponse(bookingId);
 
   const emailNote = emailResult.success
     ? `I've sent the reservation details to **${option.hotelName}** (${hotelEmail}).`
@@ -386,6 +393,35 @@ async function triggerDispatch(bookingId: string, option: BookingOption): Promis
 
   return text(
     `All set! ${emailNote}\n\nHere's a summary:\n- Guest: ${booking.customer.name}\n- Hotel: ${option.hotelName} - ${option.roomType.name}\n- Dates: ${booking.travel.checkIn} to ${booking.travel.checkOut}\n- Total: $${option.totalPrice}\n\nThe hotel will confirm shortly. I'll notify you once confirmed!`
+  );
+}
+
+// ─── Phase: Sent to hotel — handle "more info needed" replies ───────────────
+
+async function handleSentToHotel(
+  booking: BookingRequest,
+  customerMessage: string,
+): Promise<WorkflowResult> {
+  const tx = store.getLatestTransaction(booking.id);
+
+  // If hotel asked for more info and customer is responding
+  if (tx && tx.hotelResponseType === "more_info_needed") {
+    addMsg(booking.id, "system", `Customer provided additional info: "${customerMessage}"`);
+
+    // Reset the transaction state so the simulator can act again
+    store.updateTransaction(tx.id, { hotelResponseType: undefined, hotelMessage: undefined });
+
+    // Re-send with high confirmation bias (90%)
+    simulateHotelResponse(booking.id, 0.9);
+
+    return text(
+      "Thank you for providing that information! I've forwarded it to the hotel. We should hear back shortly."
+    );
+  }
+
+  // Default: still waiting for initial hotel response
+  return text(
+    "Your reservation has been sent to the hotel. We're waiting for their confirmation — I'll let you know as soon as we hear back!"
   );
 }
 
@@ -422,7 +458,7 @@ export async function processMessage(
       return handleCollectingInfo(booking, customerMessage);
 
     case "sent_to_hotel":
-      return text("Your reservation has been sent to the hotel. We're waiting for their confirmation — I'll let you know as soon as we hear back!");
+      return handleSentToHotel(booking, customerMessage);
 
     case "confirmed":
       return text("Your booking is confirmed! Is there anything else I can help you with?");

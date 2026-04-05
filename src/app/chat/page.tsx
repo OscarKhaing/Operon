@@ -26,6 +26,7 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
+  const [agentMode, setAgentMode] = useState(false);
   const [llmStatus, setLlmStatus] = useState<{ ok: boolean; model: string } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -80,11 +81,13 @@ export default function ChatPage() {
     setInput("");
     setSending(true);
 
-    // Optimistic update — show customer message immediately
+    const role = agentMode ? "agent" : "customer";
+
+    // Optimistic update
     const tempMsg: ChatMessage = {
       id: `temp-${Date.now()}`,
       bookingId: activeBookingId,
-      role: "customer",
+      role,
       content: content.trim(),
       timestamp: new Date().toISOString(),
       metadata: metadata ?? undefined,
@@ -99,6 +102,7 @@ export default function ChatPage() {
           bookingId: activeBookingId,
           content: content.trim(),
           metadata: metadata ?? undefined,
+          ...(agentMode ? { role: "agent" } : {}),
         }),
       });
 
@@ -263,7 +267,31 @@ export default function ChatPage() {
               </div>
 
               {/* Input */}
-              <div className="bg-white border-t border-gray-200 px-6 py-4">
+              <div className="bg-white border-t border-gray-200 px-6 py-3">
+                {/* Agent mode toggle */}
+                <div className="flex items-center gap-2 mb-2">
+                  <button
+                    onClick={() => setAgentMode(false)}
+                    className={cn(
+                      "px-3 py-1 rounded-full text-xs font-medium transition-colors",
+                      !agentMode ? "bg-sky-100 text-sky-700" : "text-gray-400 hover:text-gray-600"
+                    )}
+                  >
+                    <span className="flex items-center gap-1"><Bot className="w-3 h-3" /> AI Agent</span>
+                  </button>
+                  <button
+                    onClick={() => setAgentMode(true)}
+                    className={cn(
+                      "px-3 py-1 rounded-full text-xs font-medium transition-colors",
+                      agentMode ? "bg-violet-100 text-violet-700" : "text-gray-400 hover:text-gray-600"
+                    )}
+                  >
+                    <span className="flex items-center gap-1"><User className="w-3 h-3" /> Agent Mode</span>
+                  </button>
+                  {agentMode && (
+                    <span className="text-[10px] text-violet-500 ml-1">Typing as agent — bypasses AI</span>
+                  )}
+                </div>
                 <div className="flex items-center gap-3">
                   <input
                     type="text"
@@ -271,21 +299,33 @@ export default function ChatPage() {
                     onChange={(e) => setInput(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleTextSend()}
                     placeholder={
-                      activeBooking.status === "confirmed"
-                        ? "Booking confirmed!"
-                        : activeBooking.status === "sent_to_hotel"
-                          ? "Waiting for hotel confirmation..."
-                          : activeBooking.status === "options_presented"
-                            ? "Click an option above, or type your preference..."
-                            : "Type customer message..."
+                      agentMode
+                        ? "Type as agent (bypasses AI)..."
+                        : activeBooking.status === "confirmed"
+                          ? "Booking confirmed!"
+                          : activeBooking.status === "cancelled"
+                            ? "Booking cancelled"
+                            : activeBooking.status === "options_presented"
+                              ? "Click an option above, or type your preference..."
+                              : "Type customer message..."
                     }
-                    className="flex-1 px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent"
-                    disabled={sending || ["confirmed", "sent_to_hotel"].includes(activeBooking.status)}
+                    className={cn(
+                      "flex-1 px-4 py-2.5 bg-gray-50 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:border-transparent",
+                      agentMode
+                        ? "border-violet-300 focus:ring-violet-500"
+                        : "border-gray-200 focus:ring-sky-500"
+                    )}
+                    disabled={sending || (!agentMode && ["confirmed", "cancelled"].includes(activeBooking.status))}
                   />
                   <button
                     onClick={handleTextSend}
-                    disabled={!input.trim() || sending || ["confirmed", "sent_to_hotel"].includes(activeBooking.status)}
-                    className="px-4 py-2.5 bg-sky-500 text-white rounded-lg text-sm font-medium hover:bg-sky-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+                    disabled={!input.trim() || sending || (!agentMode && ["confirmed", "cancelled"].includes(activeBooking.status))}
+                    className={cn(
+                      "px-4 py-2.5 text-white rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2",
+                      agentMode
+                        ? "bg-violet-500 hover:bg-violet-600"
+                        : "bg-sky-500 hover:bg-sky-600"
+                    )}
                   >
                     {sending ? (
                       <Loader2 className="w-4 h-4 animate-spin" />
@@ -503,6 +543,29 @@ function MessageBubble({
   optionsSelectable: boolean;
 }) {
   if (message.role === "system") {
+    // Hotel response styling
+    if (message.metadata?.type === "hotel_response") {
+      const resp = message.metadata;
+      const styles = {
+        confirmed: "bg-emerald-50 border-emerald-200 text-emerald-700",
+        more_info_needed: "bg-amber-50 border-amber-200 text-amber-700",
+        no_availability: "bg-red-50 border-red-200 text-red-700",
+      };
+      const icons = {
+        confirmed: <CheckCircle2 className="w-4 h-4 text-emerald-500" />,
+        more_info_needed: <Info className="w-4 h-4 text-amber-500" />,
+        no_availability: <XCircle className="w-4 h-4 text-red-500" />,
+      };
+      return (
+        <div className="flex justify-center">
+          <div className={cn("border rounded-lg px-4 py-2.5 text-xs max-w-md flex items-center gap-2", styles[resp.responseType])}>
+            {icons[resp.responseType]}
+            <span>{message.content}</span>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="flex justify-center">
         <div className="bg-gray-100 text-gray-500 text-xs px-3 py-1.5 rounded-full max-w-md text-center">

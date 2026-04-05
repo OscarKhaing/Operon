@@ -45,10 +45,19 @@ export async function POST(req: Request) {
 
 export async function PATCH(req: Request) {
   const body = await req.json();
-  const { id, ...updates } = body;
-  const updated = store.updateBooking(id, updates);
-  if (!updated) {
+  const { id, customer, travel, preferences, ...rest } = body;
+
+  const booking = store.getBooking(id);
+  if (!booking) {
     return NextResponse.json({ error: "Booking not found" }, { status: 404 });
   }
+
+  // Deep-merge nested objects so partial updates don't destroy sibling fields
+  const merged: Partial<BookingRequest> = { ...rest };
+  if (customer) merged.customer = { ...booking.customer, ...customer };
+  if (travel) merged.travel = { ...booking.travel, ...travel };
+  if (preferences) merged.preferences = { ...booking.preferences, ...preferences };
+
+  const updated = store.updateBooking(id, merged);
   return NextResponse.json(updated);
 }
