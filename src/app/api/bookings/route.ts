@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { store } from "@/lib/store";
 import { BookingRequest } from "@/lib/types";
+import { validateBookingPatch } from "@/lib/validation";
 import { v4 as uuid } from "uuid";
 
 export async function GET() {
@@ -8,7 +9,10 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const body = await req.json();
+  const body = await req.json().catch(() => null);
+  if (!body || typeof body !== "object") {
+    return NextResponse.json({ error: "Request body must be a JSON object" }, { status: 400 });
+  }
   const now = new Date().toISOString();
 
   const booking: BookingRequest = {
@@ -44,8 +48,13 @@ export async function POST(req: Request) {
 }
 
 export async function PATCH(req: Request) {
-  const body = await req.json();
-  const { id, customer, travel, preferences, ...rest } = body;
+  const body = await req.json().catch(() => null);
+  const v = validateBookingPatch(body);
+  if (!v.ok) {
+    return NextResponse.json({ error: v.error }, { status: 400 });
+  }
+
+  const { id, customer, travel, preferences, ...rest } = v.data;
 
   const booking = store.getBooking(id);
   if (!booking) {
@@ -54,9 +63,9 @@ export async function PATCH(req: Request) {
 
   // Deep-merge nested objects so partial updates don't destroy sibling fields
   const merged: Partial<BookingRequest> = { ...rest };
-  if (customer) merged.customer = { ...booking.customer, ...customer };
-  if (travel) merged.travel = { ...booking.travel, ...travel };
-  if (preferences) merged.preferences = { ...booking.preferences, ...preferences };
+  if (customer) merged.customer = { ...booking.customer, ...customer } as BookingRequest["customer"];
+  if (travel) merged.travel = { ...booking.travel, ...travel } as BookingRequest["travel"];
+  if (preferences) merged.preferences = { ...booking.preferences, ...preferences } as BookingRequest["preferences"];
 
   const updated = store.updateBooking(id, merged);
   return NextResponse.json(updated);

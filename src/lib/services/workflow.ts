@@ -67,7 +67,9 @@ function text(content: string): WorkflowResult {
 
 // ─── Phase: Collect booking preferences ─────────────────────────────────────
 
-const PREF_FIELDS = ["destination", "checkIn", "checkOut", "guestCount", "roomType", "maxBudget"] as const;
+// Only destination + dates are required to search. The rest are optional filters.
+const REQUIRED_PREF_FIELDS = ["destination", "checkIn", "checkOut"] as const;
+const ALL_PREF_FIELDS = ["destination", "checkIn", "checkOut", "guestCount", "roomType", "maxBudget"] as const;
 
 async function handleCollectingPreferences(
   booking: BookingRequest,
@@ -145,17 +147,22 @@ async function handleCollectingPreferences(
     roomType: updated.preferences.roomType !== "standard" || prefs.roomType ? updated.preferences.roomType : null,
     maxBudget: updated.preferences.maxBudgetPerNight > 0 ? updated.preferences.maxBudgetPerNight : null,
   };
-  const missing = PREF_FIELDS.filter((f) => knownFields[f] === null || knownFields[f] === undefined);
+  const requiredMissing = REQUIRED_PREF_FIELDS.filter((f) => knownFields[f] === null || knownFields[f] === undefined);
+  const optionalMissing = ALL_PREF_FIELDS.filter(
+    (f) => !REQUIRED_PREF_FIELDS.includes(f as typeof REQUIRED_PREF_FIELDS[number]) && (knownFields[f] === null || knownFields[f] === undefined)
+  );
 
-  if (missing.length === 0) {
-    // All preferences collected — transition to matching
+  if (requiredMissing.length === 0) {
+    // All required preferences collected — transition to matching.
+    // Optional fields (guestCount, roomType, maxBudget) will use defaults/show all.
     store.updateBooking(booking.id, { status: "matching" });
     return handleMatching(booking.id);
   }
 
-  // Still collecting — ask for missing
+  // Still collecting required fields — ask for missing (include optional hints naturally)
   store.updateBooking(booking.id, { status: "extracting" });
-  const reply = await generatePreferenceReply(convo, knownFields, missing);
+  const allMissing = [...requiredMissing, ...optionalMissing];
+  const reply = await generatePreferenceReply(convo, knownFields, allMissing);
   return text(reply);
 }
 

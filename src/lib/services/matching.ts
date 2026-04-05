@@ -29,36 +29,46 @@ function scoreOption(
   let score = 50; // base score
   const reasons: string[] = [];
 
-  // Price within budget
-  if (room.basePrice <= criteria.maxBudgetPerNight) {
-    const savings = criteria.maxBudgetPerNight - room.basePrice;
-    const savingsRatio = savings / criteria.maxBudgetPerNight;
-    score += Math.round(savingsRatio * 25);
-    reasons.push(`$${room.basePrice}/night is within your $${criteria.maxBudgetPerNight} budget`);
+  // Price within budget (skip if no budget specified)
+  if (criteria.maxBudgetPerNight > 0) {
+    if (room.basePrice <= criteria.maxBudgetPerNight) {
+      const savings = criteria.maxBudgetPerNight - room.basePrice;
+      const savingsRatio = savings / criteria.maxBudgetPerNight;
+      score += Math.round(savingsRatio * 25);
+      reasons.push(`$${room.basePrice}/night is within your $${criteria.maxBudgetPerNight} budget`);
+    } else {
+      const overageRatio = (room.basePrice - criteria.maxBudgetPerNight) / criteria.maxBudgetPerNight;
+      score -= Math.round(overageRatio * 30);
+      reasons.push(`$${room.basePrice}/night exceeds budget by $${room.basePrice - criteria.maxBudgetPerNight}`);
+    }
   } else {
-    const overageRatio = (room.basePrice - criteria.maxBudgetPerNight) / criteria.maxBudgetPerNight;
-    score -= Math.round(overageRatio * 30);
-    reasons.push(`$${room.basePrice}/night exceeds budget by $${room.basePrice - criteria.maxBudgetPerNight}`);
+    reasons.push(`$${room.basePrice}/night`);
   }
 
   // Star rating bonus
   score += hotel.stars * 3;
   reasons.push(`${hotel.stars}-star property`);
 
-  // Room type match
-  const normalizedRoom = criteria.roomType.toLowerCase();
-  const normalizedName = room.name.toLowerCase();
-  if (normalizedName.includes(normalizedRoom)) {
-    score += 15;
-    reasons.push("Matches preferred room type");
+  // Room type match (skip if no preference — "any" or unspecified)
+  if (criteria.roomType) {
+    const normalizedRoom = criteria.roomType.toLowerCase();
+    const normalizedName = room.name.toLowerCase();
+    if (normalizedName.includes(normalizedRoom)) {
+      score += 15;
+      reasons.push("Matches preferred room type");
+    }
   }
 
-  // Guest capacity
-  if (room.maxGuests >= criteria.guestCount) {
-    score += 5;
+  // Guest capacity (skip penalty if not specified, default assumes 2)
+  if (criteria.guestCount > 0) {
+    if (room.maxGuests >= criteria.guestCount) {
+      score += 5;
+    } else {
+      score -= 20;
+      reasons.push("May not accommodate all guests");
+    }
   } else {
-    score -= 20;
-    reasons.push("May not accommodate all guests");
+    score += 5; // no preference = all rooms valid
   }
 
   // Cap score
