@@ -897,6 +897,9 @@ async function handleCollectingInfo(
     } else if (selectedOption.category === "flight") {
       itemName = `${selectedOption.airline} ${selectedOption.flightNumber}`;
       itemDescription = `${selectedOption.origin} → ${selectedOption.destination} (${selectedOption.cabinClass})`;
+    } else{
+      itemName = "NULL";
+      itemDescription = "NULL2";
     }
 
     const { url, sessionId } = await createCheckoutSession({
