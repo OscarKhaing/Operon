@@ -5,7 +5,7 @@
 import { Resend } from "resend";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
-const FROM = process.env.RESEND_FROM || "onboarding@resend.dev";
+const FROM = process.env.RESEND_FROM || "reservations@resend.dev";
 // Override: route all emails to a test inbox during development.
 // Remove this or set to "" in production to send to actual hotel emails.
 const TEST_RECIPIENT = process.env.RESEND_TEST_RECIPIENT || "akhaing@ucsd.edu";
