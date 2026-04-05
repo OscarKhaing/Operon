@@ -400,9 +400,9 @@ export default function BookingDetailPage() {
           <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 flex items-center gap-4">
             <Clock className="w-6 h-6 text-amber-500 animate-pulse" />
             <div>
-              <p className="text-sm font-medium text-amber-900">Awaiting Hotel Response</p>
+              <p className="text-sm font-medium text-amber-900">Awaiting Payment</p>
               <p className="text-xs text-amber-700 mt-0.5">
-                Reservation sent. Waiting for the hotel to confirm, request more info, or decline.
+                Reservation prepared. Waiting for customer to complete payment.
               </p>
             </div>
           </div>
@@ -413,7 +413,7 @@ export default function BookingDetailPage() {
           <div>
             <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4 flex items-center gap-2">
               <DollarSign className="w-4 h-4" />
-              Hotel Options
+              Available Options
             </h3>
             <div className="grid grid-cols-1 gap-4">
               {options.map((opt, idx) => {
@@ -547,7 +547,7 @@ export default function BookingDetailPage() {
             <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto mb-3" />
             <h3 className="text-lg font-bold text-emerald-800">Booking Confirmed</h3>
             <p className="text-sm text-emerald-600 mt-1">
-              The hotel has confirmed this reservation. The customer has been notified.
+              This reservation has been confirmed. The customer has been notified.
             </p>
           </div>
         )}

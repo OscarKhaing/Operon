@@ -459,15 +459,15 @@ export default function ChatPage() {
 // ─── Workflow stages config ─────────────────────────────────────────────────
 
 const WORKFLOW_STAGES: Record<string, { label: string; description: string; step: number }> = {
-  intake: { label: "Intake", description: "Waiting for customer to describe their needs", step: 1 },
-  extracting: { label: "Collecting Preferences", description: "Gathering destination, dates, budget...", step: 2 },
-  matching: { label: "Searching", description: "Finding matching hotels...", step: 3 },
-  options_presented: { label: "Options Sent", description: "Waiting for customer to select an option", step: 4 },
-  selected: { label: "Selected", description: "Customer chose a hotel", step: 5 },
-  collecting_info: { label: "Info Collection", description: "Gathering passport, name, contact details...", step: 5 },
-  filling_template: { label: "Processing", description: "Generating reservation document...", step: 6 },
-  sent_to_hotel: { label: "Sent", description: "Reservation sent, awaiting hotel confirmation", step: 7 },
-  confirmed: { label: "Confirmed", description: "Booking confirmed by hotel!", step: 8 },
+  intake: { label: "New Inquiry", description: "Waiting for customer to describe their needs", step: 1 },
+  extracting: { label: "Gathering Info", description: "Collecting destination, dates, budget...", step: 2 },
+  matching: { label: "Searching", description: "Finding the best options...", step: 3 },
+  options_presented: { label: "Quoted", description: "Waiting for customer to select an option", step: 4 },
+  selected: { label: "Selected", description: "Customer chose an option", step: 5 },
+  collecting_info: { label: "Finalizing Details", description: "Gathering personal details...", step: 5 },
+  filling_template: { label: "Preparing", description: "Generating reservation document...", step: 6 },
+  sent_to_hotel: { label: "Payment", description: "Awaiting customer payment", step: 7 },
+  confirmed: { label: "Confirmed", description: "Booking confirmed!", step: 8 },
 };
 
 const TOTAL_STEPS = 8;
