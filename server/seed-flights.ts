@@ -58,6 +58,42 @@ const flights = [
   // SFO → HND (San Francisco to Tokyo Haneda)
   { providerName: "ANA", origin: "San Francisco (SFO)", destination: "Tokyo (HND)", basePrice: 780, discountedPrice: 700, inventory: 22, startDate: "2026-05-25", endDate: "2026-06-15", flightNumber: "NH107", cabinClass: "Economy" },
   { providerName: "ANA", origin: "San Francisco (SFO)", destination: "Tokyo (HND)", basePrice: 3400, discountedPrice: 3000, inventory: 5, startDate: "2026-05-25", endDate: "2026-06-15", flightNumber: "NH107", cabinClass: "Business" },
+
+  // ═══ Summer/Fall 2026 (Jul-Sep) — for demo scenarios with August hotel bookings ═══
+
+  // SAN → LHR (San Diego to London) — NEW ROUTE
+  { providerName: "British Airways", origin: "San Diego (SAN)", destination: "London (LHR)", basePrice: 820, discountedPrice: 720, inventory: 28, startDate: "2026-07-15", endDate: "2026-09-01", flightNumber: "BA4282", cabinClass: "Economy" },
+  { providerName: "British Airways", origin: "San Diego (SAN)", destination: "London (LHR)", basePrice: 4200, discountedPrice: 3600, inventory: 6, startDate: "2026-07-15", endDate: "2026-09-01", flightNumber: "BA4282", cabinClass: "Business" },
+
+  // LAX → LHR (Summer extension)
+  { providerName: "British Airways", origin: "Los Angeles (LAX)", destination: "London (LHR)", basePrice: 850, discountedPrice: 750, inventory: 30, startDate: "2026-07-15", endDate: "2026-09-01", flightNumber: "BA284", cabinClass: "Economy" },
+  { providerName: "British Airways", origin: "Los Angeles (LAX)", destination: "London (LHR)", basePrice: 1500, discountedPrice: 1300, inventory: 10, startDate: "2026-07-15", endDate: "2026-09-01", flightNumber: "BA284", cabinClass: "Premium Economy" },
+  { providerName: "British Airways", origin: "Los Angeles (LAX)", destination: "London (LHR)", basePrice: 4800, discountedPrice: 4100, inventory: 4, startDate: "2026-07-15", endDate: "2026-09-01", flightNumber: "BA284", cabinClass: "Business" },
+
+  // JFK → LHR (New York to London)
+  { providerName: "British Airways", origin: "New York (JFK)", destination: "London (LHR)", basePrice: 700, discountedPrice: 620, inventory: 40, startDate: "2026-07-15", endDate: "2026-09-01", flightNumber: "BA178", cabinClass: "Economy" },
+  { providerName: "British Airways", origin: "New York (JFK)", destination: "London (LHR)", basePrice: 3800, discountedPrice: 3200, inventory: 8, startDate: "2026-07-15", endDate: "2026-09-01", flightNumber: "BA178", cabinClass: "Business" },
+
+  // SAN → NRT (Summer extension)
+  { providerName: "Japan Airlines", origin: "San Diego (SAN)", destination: "Tokyo (NRT)", basePrice: 750, discountedPrice: 650, inventory: 25, startDate: "2026-07-15", endDate: "2026-08-31", flightNumber: "JL7077", cabinClass: "Economy" },
+  { providerName: "Japan Airlines", origin: "San Diego (SAN)", destination: "Tokyo (NRT)", basePrice: 3200, discountedPrice: 2800, inventory: 6, startDate: "2026-07-15", endDate: "2026-08-31", flightNumber: "JL7077", cabinClass: "Business" },
+
+  // LAX → NRT (Summer)
+  { providerName: "ANA", origin: "Los Angeles (LAX)", destination: "Tokyo (NRT)", basePrice: 800, discountedPrice: 700, inventory: 20, startDate: "2026-08-01", endDate: "2026-09-01", flightNumber: "NH105", cabinClass: "Economy" },
+  { providerName: "ANA", origin: "Los Angeles (LAX)", destination: "Tokyo (NRT)", basePrice: 3600, discountedPrice: 3100, inventory: 5, startDate: "2026-08-01", endDate: "2026-09-01", flightNumber: "NH105", cabinClass: "Business" },
+
+  // SFO → ICN (Summer extension)
+  { providerName: "Korean Air", origin: "San Francisco (SFO)", destination: "Seoul (ICN)", basePrice: 780, discountedPrice: 680, inventory: 22, startDate: "2026-07-15", endDate: "2026-08-30", flightNumber: "KE26", cabinClass: "Economy" },
+  { providerName: "Korean Air", origin: "San Francisco (SFO)", destination: "Seoul (ICN)", basePrice: 2800, discountedPrice: 2400, inventory: 6, startDate: "2026-07-15", endDate: "2026-08-30", flightNumber: "KE26", cabinClass: "Business" },
+
+  // LAX → SIN (Summer)
+  { providerName: "Singapore Airlines", origin: "Los Angeles (LAX)", destination: "Singapore (SIN)", basePrice: 920, discountedPrice: 840, inventory: 18, startDate: "2026-08-01", endDate: "2026-09-01", flightNumber: "SQ39", cabinClass: "Economy" },
+  { providerName: "Singapore Airlines", origin: "Los Angeles (LAX)", destination: "Singapore (SIN)", basePrice: 3500, discountedPrice: 3100, inventory: 5, startDate: "2026-08-01", endDate: "2026-09-01", flightNumber: "SQ39", cabinClass: "Business" },
+
+  // Return flights from London
+  { providerName: "British Airways", origin: "London (LHR)", destination: "Los Angeles (LAX)", basePrice: 850, discountedPrice: 750, inventory: 30, startDate: "2026-07-15", endDate: "2026-09-01", flightNumber: "BA283", cabinClass: "Economy" },
+  { providerName: "British Airways", origin: "London (LHR)", destination: "San Diego (SAN)", basePrice: 820, discountedPrice: 720, inventory: 25, startDate: "2026-07-15", endDate: "2026-09-01", flightNumber: "BA4283", cabinClass: "Economy" },
+  { providerName: "British Airways", origin: "London (LHR)", destination: "New York (JFK)", basePrice: 700, discountedPrice: 620, inventory: 35, startDate: "2026-07-15", endDate: "2026-09-01", flightNumber: "BA179", cabinClass: "Economy" },
 ];
 
 async function seed() {

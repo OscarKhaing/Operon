@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useState, useRef, useCallback } from "react";
-import { BookingRequest, ChatMessage, HotelOptionCard, FlightOptionCard, RestaurantOptionCard } from "@/lib/types";
+import { Suspense, useEffect, useState, useRef, useCallback } from "react";
+import { useSearchParams } from "next/navigation";
+import { BookingRequest, ChatMessage, HotelOptionCard, FlightOptionCard, RestaurantOptionCard, ConfirmedBookingSummary } from "@/lib/types";
 import { cn, formatDateTime } from "@/lib/utils";
+import { runDemo, DEMO_STEPS } from "@/lib/demo-script";
 import {
   Send,
   Bot,
@@ -20,13 +22,27 @@ import Header from "@/components/layout/Header";
 // Note: Duplicating OptionCard and MessageBubble to keep the user chat fully independent
 // from the operator chat.
 
-export default function CustomerChatPage() {
+export default function CustomerChatPageWrapper() {
+  return (
+    <Suspense fallback={<div className="h-screen flex items-center justify-center bg-gray-50"><p className="text-gray-400">Loading...</p></div>}>
+      <CustomerChatPage />
+    </Suspense>
+  );
+}
+
+function CustomerChatPage() {
+  const searchParams = useSearchParams();
+  const isDemoMode = searchParams.get("demo") === "true";
+
   const [activeBookingId, setActiveBookingId] = useState<string | null>(null);
   const [activeBooking, setActiveBooking] = useState<BookingRequest | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [conciseMode, setConciseMode] = useState(false);
+  const [demoRunning, setDemoRunning] = useState(false);
+  const [demoStep, setDemoStep] = useState(-1);
+  const [demoLabel, setDemoLabel] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
@@ -186,6 +202,39 @@ export default function CustomerChatPage() {
     window.location.reload();
   }
 
+  async function startDemo() {
+    if (!activeBookingId || demoRunning) return;
+    setDemoRunning(true);
+    setDemoStep(0);
+
+    // Enable concise mode for faster demo
+    setConciseMode(true);
+    await fetch("/api/bookings", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: activeBookingId, conciseMode: true }),
+    }).catch(() => {});
+
+    try {
+      await runDemo(
+        activeBookingId,
+        (stepIndex, label) => {
+          setDemoStep(stepIndex);
+          setDemoLabel(label);
+        },
+        async () => {
+          await refreshState();
+        },
+      );
+    } catch (err) {
+      console.error("Demo error:", err);
+      setDemoLabel(`Error: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setDemoRunning(false);
+      setDemoLabel("Demo complete!");
+    }
+  }
+
   if (!activeBookingId || !activeBooking) {
     return (
       <div className="h-screen flex items-center justify-center bg-gray-50">
@@ -216,13 +265,34 @@ export default function CustomerChatPage() {
             </p>
           </div>
         </div>
-        <button
-          onClick={handleRestart}
-          className="text-xs text-gray-500 hover:text-gray-900 border border-gray-200 rounded-full px-3 py-1.5 transition-colors"
-        >
-          Start New Chat
-        </button>
+        <div className="flex items-center gap-2">
+          {isDemoMode && !demoRunning && (
+            <button
+              onClick={startDemo}
+              className="text-xs text-white bg-violet-500 hover:bg-violet-600 rounded-full px-3 py-1.5 transition-colors font-medium"
+            >
+              Start Demo
+            </button>
+          )}
+          <button
+            onClick={handleRestart}
+            className="text-xs text-gray-500 hover:text-gray-900 border border-gray-200 rounded-full px-3 py-1.5 transition-colors"
+          >
+            Start New Chat
+          </button>
+        </div>
       </header>
+
+      {/* Demo progress bar */}
+      {demoRunning && (
+        <div className="bg-violet-50 border-b border-violet-200 px-6 py-2 flex items-center gap-3">
+          <Loader2 className="w-3.5 h-3.5 animate-spin text-violet-500" />
+          <span className="text-xs text-violet-700 font-medium">{demoLabel}</span>
+          <div className="ml-auto text-[10px] text-violet-400">
+            Step {demoStep + 1}/{DEMO_STEPS.length}
+          </div>
+        </div>
+      )}
 
       {/* Chat Area */}
       <div className="flex-1 flex flex-col max-w-4xl mx-auto w-full overflow-hidden px-4 md:px-0">
@@ -259,6 +329,11 @@ export default function CustomerChatPage() {
 
           <div ref={messagesEndRef} />
         </div>
+
+        {/* Trip Summary */}
+        {activeBooking.confirmedBookings && activeBooking.confirmedBookings.length > 0 && (
+          <TripSummary bookings={activeBooking.confirmedBookings} />
+        )}
 
         {/* Input Area */}
         <div className="bg-white border-t border-gray-200 p-4 md:p-6 pb-6 md:pb-8">
@@ -546,15 +621,8 @@ function MessageBubble({
         </div>
       );
     }
-    // Optionally hide regular purely internal system logs from customer
-    // For demo purposes, we might just style them softly
-    return (
-      <div className="flex justify-center my-2">
-        <div className="border border-gray-100 bg-gray-50 text-gray-400 text-[11px] px-4 py-1.5 rounded-full max-w-md text-center">
-          system: {message.content}
-        </div>
-      </div>
-    );
+    // Hide internal system logs from customer view
+    return null;
   }
 
   const isCustomer = message.role === "customer";
@@ -617,6 +685,49 @@ function MessageBubble({
           <User className="w-5 h-5 text-gray-500" />
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── Trip Summary Component ───────────────────────────────────────────────
+
+const categoryIcons: Record<string, string> = { hotel: "🏨", flight: "✈️", restaurant: "🍽️" };
+
+function TripSummary({ bookings }: { bookings: ConfirmedBookingSummary[] }) {
+  const [collapsed, setCollapsed] = useState(false);
+
+  if (collapsed) {
+    return (
+      <button
+        onClick={() => setCollapsed(false)}
+        className="bg-sky-50 border-t border-sky-100 px-4 py-2 text-xs text-sky-600 font-medium flex items-center justify-center gap-2 hover:bg-sky-100 transition-colors"
+      >
+        {bookings.map((b) => categoryIcons[b.category] || "📋").join(" ")} Show trip summary ({bookings.length} confirmed)
+      </button>
+    );
+  }
+
+  return (
+    <div className="bg-sky-50/50 border-t border-sky-100">
+      <div className="flex items-center justify-between px-4 pt-3 pb-1">
+        <span className="text-[11px] font-semibold text-sky-700 uppercase tracking-wider">Your Trip</span>
+        <button onClick={() => setCollapsed(true)} className="text-[10px] text-sky-500 hover:text-sky-700">hide</button>
+      </div>
+      <div className="flex gap-3 px-4 pb-3 overflow-x-auto">
+        {bookings.map((b, i) => (
+          <div key={i} className="flex-shrink-0 bg-white rounded-lg border border-sky-200 px-3 py-2 min-w-[180px] shadow-sm">
+            <div className="flex items-center gap-1.5 mb-1">
+              <span className="text-sm">{categoryIcons[b.category] || "📋"}</span>
+              <span className="text-xs font-semibold text-gray-900 truncate">{b.providerName}</span>
+            </div>
+            <p className="text-[10px] text-gray-500 truncate">{b.details}</p>
+            <div className="flex items-center justify-between mt-1.5">
+              <span className="text-[10px] font-bold text-sky-700">${b.totalPrice}</span>
+              <span className="text-[9px] font-mono text-gray-400">{b.confirmationCode}</span>
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

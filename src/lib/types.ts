@@ -67,6 +67,7 @@ export interface BookingRequest {
   categories?: BookingCategory[];       // multi-category: all categories to book
   activeCategory?: BookingCategory;     // which category is currently being processed
   completedCategories?: BookingCategory[]; // categories that have been confirmed
+  confirmedBookings?: ConfirmedBookingSummary[]; // summaries of each confirmed category
   conciseMode?: boolean;                // when true, chatbot asks for all info at once
   customer: CustomerInfo;
   travel: TravelDetails;
@@ -155,6 +156,16 @@ export interface TemplateRecord {
   name: string;
   hotelId: string;
   fields: TemplateField[];
+}
+
+// ===== Confirmed Booking Summary =====
+
+export interface ConfirmedBookingSummary {
+  category: BookingCategory;
+  providerName: string;  // hotel name, airline + flight#, restaurant name
+  details: string;       // "Aug 4-10, London" or "LAX → LHR, Economy" or "Italian, 7pm"
+  totalPrice: number;
+  confirmationCode: string;
 }
 
 // ===== Booking Option (discriminated union) =====

@@ -9,7 +9,7 @@
  */
 import { store } from "../store";
 import {
-  BookingRequest, BookingCategory, ChatMessage, BookingOption,
+  BookingRequest, BookingCategory, ChatMessage, BookingOption, ConfirmedBookingSummary,
   MessageMetadata, HotelOptionCard, FlightOptionCard, RestaurantOptionCard,
   HotelBookingOption, FlightBookingOption, RestaurantBookingOption,
 } from "../types";
@@ -1000,13 +1000,22 @@ async function triggerHotelDispatch(bookingId: string, option: HotelBookingOptio
   store.updateBooking(bookingId, { status: "sent_to_hotel" });
   simulateHotelResponse(bookingId);
 
-  // Track this category as completed
+  // Track this category as completed + store summary
   const completed = [...(booking.completedCategories || []), "hotel" as BookingCategory];
-  store.updateBooking(bookingId, { completedCategories: completed });
-
   const updatedBooking = store.getBooking(bookingId)!;
   const tx = store.getLatestTransaction(bookingId);
   const code = tx?.confirmationCode ?? "";
+  const confirmedSummary: ConfirmedBookingSummary = {
+    category: "hotel",
+    providerName: option.hotelName,
+    details: `${updatedBooking.travel.checkIn} to ${updatedBooking.travel.checkOut}, ${updatedBooking.travel.destination}`,
+    totalPrice: option.totalPrice,
+    confirmationCode: code,
+  };
+  store.updateBooking(bookingId, {
+    completedCategories: completed,
+    confirmedBookings: [...(booking.confirmedBookings || []), confirmedSummary],
+  });
 
   const emailNote = emailResult.success
     ? `The reservation details have been sent to **${option.hotelName}** (${hotelEmail}).`
@@ -1063,11 +1072,20 @@ async function triggerFlightDispatch(bookingId: string, option: FlightBookingOpt
   simulateFlightResponse(bookingId);
 
   const completed = [...(booking.completedCategories || []), "flight" as BookingCategory];
-  store.updateBooking(bookingId, { completedCategories: completed });
-
   const updatedBooking = store.getBooking(bookingId)!;
   const tx = store.getLatestTransaction(bookingId);
   const code = tx?.confirmationCode ?? "";
+  const confirmedSummary: ConfirmedBookingSummary = {
+    category: "flight",
+    providerName: `${option.airline} ${option.flightNumber}`,
+    details: `${option.origin} → ${option.destination}, ${option.cabinClass}`,
+    totalPrice: option.totalPrice,
+    confirmationCode: code,
+  };
+  store.updateBooking(bookingId, {
+    completedCategories: completed,
+    confirmedBookings: [...(booking.confirmedBookings || []), confirmedSummary],
+  });
 
   const emailNote = emailResult.success
     ? `The booking details have been sent to **${option.airline}**.`
@@ -1118,11 +1136,20 @@ async function triggerRestaurantDispatch(bookingId: string, option: RestaurantBo
   simulateRestaurantResponse(bookingId);
 
   const completed = [...(booking.completedCategories || []), "restaurant" as BookingCategory];
-  store.updateBooking(bookingId, { completedCategories: completed });
-
   const updatedBooking = store.getBooking(bookingId)!;
   const tx = store.getLatestTransaction(bookingId);
   const code = tx?.confirmationCode ?? "";
+  const confirmedSummary: ConfirmedBookingSummary = {
+    category: "restaurant",
+    providerName: option.restaurantName,
+    details: `${option.cuisine}, ${rd?.date || "TBD"} at ${rd?.time || "TBD"}`,
+    totalPrice: option.totalPrice,
+    confirmationCode: code,
+  };
+  store.updateBooking(bookingId, {
+    completedCategories: completed,
+    confirmedBookings: [...(booking.confirmedBookings || []), confirmedSummary],
+  });
 
   const emailNote = emailResult.success
     ? `The reservation has been sent to **${option.restaurantName}**.`
