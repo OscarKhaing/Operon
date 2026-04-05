@@ -41,6 +41,10 @@ class Store {
     return this.bookings.find((b) => b.id === id);
   }
 
+  findBookingByInstagramSenderId(senderId: string): BookingRequest | undefined {
+    return this.bookings.find((b) => b.instagramSenderId === senderId);
+  }
+
   createBooking(booking: BookingRequest): BookingRequest {
     this.bookings.push(booking);
     return booking;
