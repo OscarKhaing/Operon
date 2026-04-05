@@ -106,25 +106,193 @@ function categoryLabel(c: BookingCategory): string {
 }
 
 /**
+ * Cross-populate data from completed bookings into the next category,
+ * then return a smart intro message listing assumptions and missing fields.
+ */
+function crossPopulateNextCategory(booking: BookingRequest, nextCategory: BookingCategory): string {
+  const completed = booking.completedCategories || [];
+  const assumptions: string[] = [];
+  const stillNeed: string[] = [];
+
+  // ── Gather available data from all completed categories ──
+  const hotelDone = completed.includes("hotel");
+  const flightDone = completed.includes("flight");
+
+  const destination = booking.travel.destination || booking.flightDetails?.destination || booking.restaurantDetails?.location || "";
+  const checkIn = booking.travel.checkIn || "";
+  const checkOut = booking.travel.checkOut || "";
+  const guestCount = booking.travel.guestCount || 0;
+  const flightDest = booking.flightDetails?.destination || "";
+  const flightDepart = booking.flightDetails?.departureDate || "";
+  const flightReturn = booking.flightDetails?.returnDate || "";
+  const passengers = booking.flightDetails?.passengers || 0;
+  const restLocation = booking.restaurantDetails?.location || "";
+  const partySize = booking.restaurantDetails?.partySize || 0;
+
+  // ── Pre-populate and build message based on target category ──
+
+  if (nextCategory === "flight") {
+    const fd = booking.flightDetails || { origin: "", destination: "", departureDate: "", returnDate: "", passengers: 0, cabinClass: "", maxBudget: 0 };
+    const updates: Partial<typeof fd> = {};
+
+    // Destination from hotel or restaurant
+    const inferredDest = destination;
+    if (inferredDest && !fd.destination) {
+      updates.destination = inferredDest;
+      assumptions.push(`**Destination**: ${inferredDest} (from your ${hotelDone ? "hotel" : "restaurant"} booking)`);
+    }
+
+    // Departure date from hotel check-in
+    if (hotelDone && checkIn && !fd.departureDate) {
+      updates.departureDate = checkIn;
+      assumptions.push(`**Departure date**: ${checkIn} (your hotel check-in date)`);
+    }
+
+    // Return date from hotel check-out
+    if (hotelDone && checkOut && !fd.returnDate) {
+      updates.returnDate = checkOut;
+      assumptions.push(`**Return date**: ${checkOut} (your hotel checkout date)`);
+    }
+
+    // Passengers from hotel guests
+    if (guestCount > 0 && !fd.passengers) {
+      updates.passengers = guestCount;
+      assumptions.push(`**Passengers**: ${guestCount} (same as your hotel guests)`);
+    } else if (partySize > 0 && !fd.passengers) {
+      updates.passengers = partySize;
+      assumptions.push(`**Passengers**: ${partySize} (same as your restaurant party)`);
+    }
+
+    // What's still missing
+    if (!updates.origin && !fd.origin) stillNeed.push("departure city");
+    if (!updates.destination && !fd.destination) stillNeed.push("destination");
+    if (!updates.departureDate && !fd.departureDate) stillNeed.push("departure date");
+    if (!fd.cabinClass) stillNeed.push("cabin class preference (Economy, Business, etc.)");
+    if (!fd.maxBudget) stillNeed.push("budget (optional)");
+
+    store.updateBooking(booking.id, { flightDetails: { ...fd, ...updates } as BookingRequest["flightDetails"] });
+
+  } else if (nextCategory === "restaurant") {
+    const rd = booking.restaurantDetails || { location: "", date: "", time: "", partySize: 0, cuisine: "", priceRange: "" };
+    const updates: Partial<typeof rd> = {};
+
+    // Location from hotel destination or flight destination
+    const inferredLoc = destination || flightDest;
+    if (inferredLoc && !rd.location) {
+      updates.location = inferredLoc;
+      assumptions.push(`**Location**: ${inferredLoc} (from your ${hotelDone ? "hotel" : "flight"} booking)`);
+    }
+
+    // Party size from guests or passengers
+    if (guestCount > 0 && !rd.partySize) {
+      updates.partySize = guestCount;
+      assumptions.push(`**Party size**: ${guestCount} (same as your hotel guests)`);
+    } else if (passengers > 0 && !rd.partySize) {
+      updates.partySize = passengers;
+      assumptions.push(`**Party size**: ${passengers} (same as your flight passengers)`);
+    }
+
+    // Date: first night of hotel stay or flight arrival
+    if (hotelDone && checkIn && !rd.date) {
+      updates.date = checkIn;
+      assumptions.push(`**Date**: ${checkIn} (first night of your hotel stay)`);
+    } else if (flightDone && flightDepart && !rd.date) {
+      updates.date = flightDepart;
+      assumptions.push(`**Date**: ${flightDepart} (your arrival date)`);
+    }
+
+    // What's still missing
+    if (!updates.location && !rd.location) stillNeed.push("location/city");
+    if (!updates.date && !rd.date) stillNeed.push("date");
+    if (!rd.time) stillNeed.push("preferred time");
+    if (!rd.cuisine) stillNeed.push("cuisine preference (optional)");
+    if (!rd.priceRange) stillNeed.push("price range (optional)");
+
+    store.updateBooking(booking.id, { restaurantDetails: { ...rd, ...updates } as BookingRequest["restaurantDetails"] });
+
+  } else if (nextCategory === "hotel") {
+    const travelUpdates: Record<string, unknown> = {};
+    const prefUpdates: Record<string, unknown> = {};
+
+    // Destination from flight or restaurant
+    const inferredDest = flightDest || restLocation;
+    if (inferredDest && !booking.travel.destination) {
+      travelUpdates.destination = inferredDest;
+      assumptions.push(`**Destination**: ${inferredDest} (from your ${flightDone ? "flight" : "restaurant"} booking)`);
+    }
+
+    // Dates from flight
+    if (flightDone && flightDepart && !booking.travel.checkIn) {
+      travelUpdates.checkIn = flightDepart;
+      assumptions.push(`**Check-in**: ${flightDepart} (your flight arrival date)`);
+    }
+    if (flightDone && flightReturn && !booking.travel.checkOut) {
+      travelUpdates.checkOut = flightReturn;
+      assumptions.push(`**Check-out**: ${flightReturn} (your return flight date)`);
+    }
+
+    // Guests from passengers or party
+    if (passengers > 0 && guestCount <= 0) {
+      travelUpdates.guestCount = passengers;
+      assumptions.push(`**Guests**: ${passengers} (same as your flight passengers)`);
+    } else if (partySize > 0 && guestCount <= 0) {
+      travelUpdates.guestCount = partySize;
+      assumptions.push(`**Guests**: ${partySize} (same as your restaurant party)`);
+    }
+
+    // What's still missing
+    if (!travelUpdates.destination && !booking.travel.destination) stillNeed.push("destination");
+    if (!travelUpdates.checkIn && !booking.travel.checkIn) stillNeed.push("check-in date");
+    if (!travelUpdates.checkOut && !booking.travel.checkOut) stillNeed.push("check-out date");
+    if (!booking.preferences.roomType) stillNeed.push("room type preference (optional)");
+    if (!booking.preferences.maxBudgetPerNight) stillNeed.push("budget per night (optional)");
+
+    if (Object.keys(travelUpdates).length > 0) {
+      store.updateBooking(booking.id, { travel: { ...booking.travel, ...travelUpdates } as BookingRequest["travel"] });
+    }
+    if (Object.keys(prefUpdates).length > 0) {
+      store.updateBooking(booking.id, { preferences: { ...booking.preferences, ...prefUpdates } as BookingRequest["preferences"] });
+    }
+  }
+
+  // Update category and status
+  store.updateBooking(booking.id, {
+    category: nextCategory,
+    activeCategory: nextCategory,
+    status: "extracting",
+  });
+  addMsg(booking.id, "system", `Transitioning to ${nextCategory} booking with cross-populated data`);
+
+  // Build the intro message
+  let intro = `Now for your **${categoryLabel(nextCategory)}** booking!`;
+
+  if (assumptions.length > 0) {
+    intro += `\n\nBased on your previous booking, I've pre-filled:\n${assumptions.map((a) => `- ${a}`).join("\n")}`;
+    intro += `\n\nFeel free to change any of these — just let me know.`;
+  }
+
+  if (stillNeed.length > 0) {
+    intro += `\n\nI still need: **${stillNeed.join("**, **")}**.`;
+    if (stillNeed.length === 1) {
+      intro += ` What's your ${stillNeed[0]}?`;
+    }
+  } else {
+    intro += `\n\nI have everything I need — let me search for options!`;
+  }
+
+  return intro;
+}
+
+/**
  * Transition to the next category after one is confirmed.
- * Returns a WorkflowResult with a message about what's next, or null if nothing remains.
+ * Uses cross-population to pre-fill data and generate a smart intro.
  */
 function transitionToNextCategory(booking: BookingRequest): WorkflowResult | null {
   const remaining = getRemainingCategories(booking);
   if (remaining.length === 0) return null;
 
-  const next = remaining[0];
-  store.updateBooking(booking.id, {
-    category: next,
-    activeCategory: next,
-    status: "intake",
-  });
-
-  addMsg(booking.id, "system", `Transitioning to ${next} booking`);
-
-  return text(
-    `Now let's take care of your **${categoryLabel(next)}** booking. What details do you have in mind?`
-  );
+  const intro = crossPopulateNextCategory(booking, remaining[0]);
+  return text(intro);
 }
 
 // ─── Phase: Collect booking preferences (category-aware) ───────────────────
@@ -239,10 +407,19 @@ const FLIGHT_ALL = ["origin", "destination", "departureDate", "returnDate", "pas
 async function handleFlightPreferences(booking: BookingRequest): Promise<WorkflowResult> {
   const convo = recentConversation(booking.id);
   const availableRoutes = await fetchAvailableRoutes();
-  const prefs = await extractFlightPreferences(convo, availableRoutes);
 
-  // Merge into flightDetails
+  // Build known fields from pre-populated/existing flightDetails to give LLM context
   const fd = booking.flightDetails || { origin: "", destination: "", departureDate: "", returnDate: "", passengers: 0, cabinClass: "", maxBudget: 0 };
+  const currentKnown: Record<string, string | number | null> = {
+    origin: fd.origin || null,
+    destination: fd.destination || null,
+    departureDate: fd.departureDate || null,
+    returnDate: fd.returnDate || null,
+    passengers: fd.passengers > 0 ? fd.passengers : null,
+    cabinClass: fd.cabinClass || null,
+    maxBudget: fd.maxBudget > 0 ? fd.maxBudget : null,
+  };
+  const prefs = await extractFlightPreferences(convo, availableRoutes, currentKnown);
   const updates: Record<string, unknown> = {};
   if (prefs.origin) updates.origin = prefs.origin;
   if (prefs.destination) updates.destination = prefs.destination;
@@ -312,10 +489,18 @@ const RESTAURANT_ALL = ["location", "date", "time", "partySize", "cuisine", "pri
 async function handleRestaurantPreferences(booking: BookingRequest): Promise<WorkflowResult> {
   const convo = recentConversation(booking.id);
   const availableLocations = await fetchAvailableRestaurantLocations();
-  const prefs = await extractRestaurantPreferences(convo, availableLocations);
 
-  // Merge into restaurantDetails
+  // Build known fields from pre-populated/existing restaurantDetails to give LLM context
   const rd = booking.restaurantDetails || { location: "", date: "", time: "", partySize: 0, cuisine: "", priceRange: "" };
+  const currentKnown: Record<string, string | number | null> = {
+    location: rd.location || null,
+    date: rd.date || null,
+    time: rd.time || null,
+    partySize: rd.partySize > 0 ? rd.partySize : null,
+    cuisine: rd.cuisine || null,
+    priceRange: rd.priceRange || null,
+  };
+  const prefs = await extractRestaurantPreferences(convo, availableLocations, currentKnown);
   const updates: Record<string, unknown> = {};
   if (prefs.location) updates.location = prefs.location;
   if (prefs.date) updates.date = prefs.date;
@@ -430,6 +615,31 @@ async function handleFlightMatching(booking: BookingRequest): Promise<WorkflowRe
 
   if (options.length === 0) {
     store.updateBooking(booking.id, { status: "extracting" });
+
+    // Diagnostic: check if flights exist on this route but outside requested dates
+    const fd = booking.flightDetails;
+    if (fd?.origin && fd?.destination) {
+      const allOnRoute = await fetchFlights({ origin: fd.origin, destination: fd.destination });
+      if (allOnRoute.length > 0) {
+        const earliest = allOnRoute.reduce((a, b) => a.departureDate < b.departureDate ? a : b);
+        const latest = allOnRoute.reduce((a, b) => a.returnDate > b.returnDate ? a : b);
+        const rangeStart = new Date(earliest.departureDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+        const rangeEnd = new Date(latest.returnDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+
+        return text(
+          `I found flights on the **${fd.origin} → ${fd.destination}** route, but they're only available between **${rangeStart}** and **${rangeEnd}**. ` +
+          `Your requested dates (${fd.departureDate} to ${fd.returnDate || "one-way"}) fall outside that window.\n\n` +
+          `Would you like to adjust your travel dates, or try a different route?`
+        );
+      }
+
+      // No flights on this route at all
+      return text(
+        `Unfortunately, we don't have any flights on the **${fd.origin} → ${fd.destination}** route in our system. ` +
+        `Would you like to try a different departure city or destination?`
+      );
+    }
+
     return text("I couldn't find any flights matching your criteria. Could you consider different dates, a different route, or adjust your budget?");
   }
 
@@ -775,16 +985,17 @@ async function triggerHotelDispatch(bookingId: string, option: HotelBookingOptio
     ? `The reservation details have been sent to **${option.hotelName}** (${hotelEmail}).`
     : `The reservation was prepared for **${option.hotelName}**, but the email couldn't be delivered right now. Our team will follow up manually.`;
 
-  const remaining = getRemainingCategories(updatedBooking);
-  const nextHint = remaining.length > 0
-    ? `\n\nNext up: your **${categoryLabel(remaining[0])}** booking!`
-    : "";
+  const summary = `${emailNote}\n\nHere's your summary:\n- Guest: ${updatedBooking.customer.name}\n- Hotel: ${option.hotelName} - ${option.roomType.name}\n- Dates: ${updatedBooking.travel.checkIn} to ${updatedBooking.travel.checkOut}\n- Total: $${option.totalPrice}` +
+    (code ? `\n- Confirmation Code: **${code}**` : "");
 
-  return text(
-    `${emailNote}\n\nHere's your summary:\n- Guest: ${updatedBooking.customer.name}\n- Hotel: ${option.hotelName} - ${option.roomType.name}\n- Dates: ${updatedBooking.travel.checkIn} to ${updatedBooking.travel.checkOut}\n- Total: $${option.totalPrice}` +
-    (code ? `\n- Confirmation Code: **${code}**` : "") +
-    nextHint
-  );
+  // Auto-transition to next category with smart intro
+  const remaining = getRemainingCategories(store.getBooking(bookingId)!);
+  if (remaining.length > 0) {
+    const intro = crossPopulateNextCategory(store.getBooking(bookingId)!, remaining[0]);
+    return text(`${summary}\n\n---\n\n${intro}`);
+  }
+
+  return text(summary);
 }
 
 async function triggerFlightDispatch(bookingId: string, option: FlightBookingOption): Promise<WorkflowResult> {
@@ -835,16 +1046,16 @@ async function triggerFlightDispatch(bookingId: string, option: FlightBookingOpt
     ? `The booking details have been sent to **${option.airline}**.`
     : `The booking was prepared for **${option.airline}**, but the email couldn't be delivered right now. Our team will follow up manually.`;
 
-  const remaining = getRemainingCategories(updatedBooking);
-  const nextHint = remaining.length > 0
-    ? `\n\nNext up: your **${categoryLabel(remaining[0])}** booking!`
-    : "";
+  const summary = `${emailNote}\n\nHere's your summary:\n- Passenger: ${updatedBooking.customer.name}\n- Flight: ${option.airline} ${option.flightNumber}\n- Route: ${option.origin} → ${option.destination}\n- Class: ${option.cabinClass}\n- Total: $${option.totalPrice}` +
+    (code ? `\n- Confirmation Code: **${code}**` : "");
 
-  return text(
-    `${emailNote}\n\nHere's your summary:\n- Passenger: ${updatedBooking.customer.name}\n- Flight: ${option.airline} ${option.flightNumber}\n- Route: ${option.origin} → ${option.destination}\n- Class: ${option.cabinClass}\n- Total: $${option.totalPrice}` +
-    (code ? `\n- Confirmation Code: **${code}**` : "") +
-    nextHint
-  );
+  const remaining = getRemainingCategories(store.getBooking(bookingId)!);
+  if (remaining.length > 0) {
+    const intro = crossPopulateNextCategory(store.getBooking(bookingId)!, remaining[0]);
+    return text(`${summary}\n\n---\n\n${intro}`);
+  }
+
+  return text(summary);
 }
 
 async function triggerRestaurantDispatch(bookingId: string, option: RestaurantBookingOption): Promise<WorkflowResult> {
@@ -890,16 +1101,16 @@ async function triggerRestaurantDispatch(bookingId: string, option: RestaurantBo
     ? `The reservation has been sent to **${option.restaurantName}**.`
     : `The reservation was prepared for **${option.restaurantName}**, but the email couldn't be delivered right now. Our team will follow up manually.`;
 
-  const remaining = getRemainingCategories(updatedBooking);
-  const nextHint = remaining.length > 0
-    ? `\n\nNext up: your **${categoryLabel(remaining[0])}** booking!`
-    : "";
+  const summary = `${emailNote}\n\nHere's your summary:\n- Guest: ${updatedBooking.customer.name}\n- Restaurant: ${option.restaurantName} (${option.cuisine})\n- Date: ${rd?.date || "TBD"} at ${rd?.time || "TBD"}\n- Party size: ${rd?.partySize || 2}` +
+    (code ? `\n- Confirmation Code: **${code}**` : "");
 
-  return text(
-    `${emailNote}\n\nHere's your summary:\n- Guest: ${updatedBooking.customer.name}\n- Restaurant: ${option.restaurantName} (${option.cuisine})\n- Date: ${rd?.date || "TBD"} at ${rd?.time || "TBD"}\n- Party size: ${rd?.partySize || 2}` +
-    (code ? `\n- Confirmation Code: **${code}**` : "") +
-    nextHint
-  );
+  const remaining = getRemainingCategories(store.getBooking(bookingId)!);
+  if (remaining.length > 0) {
+    const intro = crossPopulateNextCategory(store.getBooking(bookingId)!, remaining[0]);
+    return text(`${summary}\n\n---\n\n${intro}`);
+  }
+
+  return text(summary);
 }
 
 // ─── Phase: Sent to hotel — handle "more info needed" replies ───────────────
@@ -1105,32 +1316,35 @@ export async function processMessage(
     }
   }
 
+  // Re-read booking after potential category/status updates above
+  const current = store.getBooking(bookingId)!;
+
   // ── When confirmed: check for remaining categories or offer others ──
-  if (booking.status === "confirmed") {
-    return handlePostConfirmation(booking, customerMessage);
+  if (current.status === "confirmed") {
+    return handlePostConfirmation(current, customerMessage);
   }
 
   // ── Route based on current workflow state ──
-  switch (booking.status) {
+  switch (current.status) {
     case "intake":
     case "extracting":
-      return handleCollectingPreferences(booking, customerMessage);
+      return handleCollectingPreferences(current, customerMessage);
 
     case "matching":
-      return handleMatching(booking.id);
+      return handleMatching(current.id);
 
     case "options_presented":
-      return handleAwaitingSelectionText(booking, customerMessage);
+      return handleAwaitingSelectionText(current, customerMessage);
 
     case "selected":
     case "collecting_info":
-      return handleCollectingInfo(booking, customerMessage);
+      return handleCollectingInfo(current, customerMessage);
 
     case "awaiting_payment":
       return text("I'm waiting for your payment confirmation from Stripe. Once you complete the payment at the link I sent, I'll proceed with your reservation.");
 
     case "sent_to_hotel":
-      return handleSentToHotel(booking, customerMessage);
+      return handleSentToHotel(current, customerMessage);
 
     case "cancelled":
       return text("This booking has been cancelled. Would you like to start a new booking?");
@@ -1150,7 +1364,7 @@ async function handlePostConfirmation(
   const remaining = getRemainingCategories(booking);
 
   if (remaining.length > 0) {
-    // Auto-transition to the next category
+    // Auto-transition with smart cross-population
     const result = transitionToNextCategory(booking);
     if (result) return result;
   }
@@ -1169,19 +1383,29 @@ async function handlePostConfirmation(
   const newCategories = categories.filter((c) => !completed.includes(c));
 
   if (newCategories.length > 0) {
+    // Add new categories and cross-populate from existing data
     const first = newCategories[0];
     const allNew = [...(booking.categories || []), ...newCategories.filter((c) => !(booking.categories || []).includes(c))];
-    store.updateBooking(booking.id, {
-      category: first,
-      activeCategory: first,
-      categories: allNew,
-      status: "intake",
-    });
+    store.updateBooking(booking.id, { categories: allNew });
     addMsg(booking.id, "system", `Adding ${newCategories.join(", ")} to booking`);
-    return text(`Let's get your **${categoryLabel(first)}** booking started! What details do you have?`);
+
+    const intro = crossPopulateNextCategory(store.getBooking(booking.id)!, first);
+    return text(intro);
   }
 
-  // Generic follow-up — offer what's available
-  const availableLabels = available.map(categoryLabel).join(", ");
-  return text(`Your ${categoryLabel(getActiveCategory(booking))} booking is confirmed! I can also help you book: ${availableLabels}. Would you like to continue with any of those?`);
+  // Contextual follow-up — offer what's available using known data
+  const lastCategory = getActiveCategory(booking);
+  const dest = booking.travel.destination || booking.flightDetails?.destination || booking.restaurantDetails?.location || "";
+  const offers: string[] = [];
+  if (available.includes("flight")) {
+    offers.push(dest ? `a **flight** to ${dest}` : "a **flight**");
+  }
+  if (available.includes("hotel")) {
+    offers.push(dest ? `a **hotel** in ${dest}` : "a **hotel**");
+  }
+  if (available.includes("restaurant")) {
+    offers.push(dest ? `a **restaurant** reservation in ${dest}` : "a **restaurant** reservation");
+  }
+
+  return text(`Your ${categoryLabel(lastCategory)} is all set! Would you also like me to book ${offers.join(" or ")}?`);
 }

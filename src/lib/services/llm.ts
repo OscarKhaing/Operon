@@ -598,13 +598,15 @@ Your ONLY job is to extract flight booking preferences that the CUSTOMER EXPLICI
 
 CRITICAL RULES:
 - Output ONLY a valid JSON object. No explanation, no text before or after.
-- You MUST use null for ANY field the customer has NOT explicitly mentioned.
+- You MUST use null for ANY field the customer has NOT explicitly mentioned in their latest message(s).
 - NEVER invent, guess, or assume values.
 - Look at the ENTIRE conversation to combine info from multiple messages.
+- PAY CLOSE ATTENTION to what the agent ASKED FOR. If the agent asked "What's your departure city?" and the customer replies with a city name, that city is the ORIGIN (departure), NOT the destination.
+- If ALREADY_KNOWN fields are provided, those fields are already set. Do NOT re-extract them unless the customer EXPLICITLY says they want to change them (e.g. "change destination to X", "actually fly to Y instead"). A customer simply providing new info for missing fields does NOT change already-known fields.
 
 Field-specific rules:
-- origin: The departure city/airport. Match to AVAILABLE_ORIGINS if provided. Use null if not mentioned.
-- destination: The arrival city/airport. Match to AVAILABLE_DESTINATIONS if provided. Use null if not mentioned.
+- origin: The departure city/airport (where the customer is FLYING FROM). Match to AVAILABLE_ORIGINS if provided. Use null if not mentioned.
+- destination: The arrival city/airport (where the customer is FLYING TO). Match to AVAILABLE_DESTINATIONS if provided. Use null if not mentioned.
 - departureDate: YYYY-MM-DD format. Year defaults to 2026 if not stated. Use null if no departure date mentioned.
 - returnDate: YYYY-MM-DD format. Year defaults to 2026. Use null if not mentioned or one-way trip.
 - passengers: Integer. "2 tickets", "for 2", "myself"=1. Use null if never mentioned.
@@ -642,13 +644,20 @@ const FLIGHT_PREFS_GEMINI_SCHEMA: Schema = {
 export async function extractFlightPreferences(
   conversationText: string,
   availableRoutes: { origins: string[]; destinations: string[] } = { origins: [], destinations: [] },
+  knownFields: Record<string, string | number | null> = {},
 ): Promise<FlightPreferencesExtraction> {
   const routeSection = (availableRoutes.origins.length > 0 || availableRoutes.destinations.length > 0)
     ? `\nAVAILABLE_ORIGINS (match customer's input to the closest one):\n${availableRoutes.origins.map((o) => `- ${o}`).join("\n")}\n\nAVAILABLE_DESTINATIONS:\n${availableRoutes.destinations.map((d) => `- ${d}`).join("\n")}\n`
     : "";
 
+  // Build known-fields context so the LLM doesn't re-extract or misassign
+  const knownEntries = Object.entries(knownFields).filter(([, v]) => v !== null && v !== "" && v !== 0);
+  const knownSection = knownEntries.length > 0
+    ? `\nALREADY_KNOWN (these are already set — use null for these unless the customer EXPLICITLY wants to change them):\n${knownEntries.map(([k, v]) => `- ${k}: ${v}`).join("\n")}\n\nThe customer's new message likely provides info for the MISSING fields, not the already-known ones.\n`
+    : "";
+
   const prompt = `Extract ONLY what the customer explicitly stated from this conversation. Use null for anything not mentioned.
-${routeSection}
+${routeSection}${knownSection}
 """
 ${conversationText}
 """
@@ -769,9 +778,11 @@ Your ONLY job is to extract restaurant booking preferences that the CUSTOMER EXP
 
 CRITICAL RULES:
 - Output ONLY a valid JSON object. No explanation, no text before or after.
-- You MUST use null for ANY field the customer has NOT explicitly mentioned.
+- You MUST use null for ANY field the customer has NOT explicitly mentioned in their latest message(s).
 - NEVER invent, guess, or assume values.
 - Look at the ENTIRE conversation to combine info from multiple messages.
+- PAY CLOSE ATTENTION to what the agent ASKED FOR. If the agent asked for a specific field and the customer responds, map their answer to that field.
+- If ALREADY_KNOWN fields are provided, those fields are already set. Do NOT re-extract them unless the customer EXPLICITLY says they want to change them.
 
 Field-specific rules:
 - location: The city or area. Match to AVAILABLE_LOCATIONS if provided. Use null if not mentioned.
@@ -810,13 +821,19 @@ const RESTAURANT_PREFS_GEMINI_SCHEMA: Schema = {
 export async function extractRestaurantPreferences(
   conversationText: string,
   availableLocations: string[] = [],
+  knownFields: Record<string, string | number | null> = {},
 ): Promise<RestaurantPreferencesExtraction> {
   const locationSection = availableLocations.length > 0
     ? `\nAVAILABLE_LOCATIONS (match customer's input to the closest one):\n${availableLocations.map((l) => `- ${l}`).join("\n")}\n`
     : "";
 
+  const knownEntries = Object.entries(knownFields).filter(([, v]) => v !== null && v !== "" && v !== 0);
+  const knownSection = knownEntries.length > 0
+    ? `\nALREADY_KNOWN (these are already set — use null for these unless the customer EXPLICITLY wants to change them):\n${knownEntries.map(([k, v]) => `- ${k}: ${v}`).join("\n")}\n\nThe customer's new message likely provides info for the MISSING fields, not the already-known ones.\n`
+    : "";
+
   const prompt = `Extract ONLY what the customer explicitly stated from this conversation. Use null for anything not mentioned.
-${locationSection}
+${locationSection}${knownSection}
 """
 ${conversationText}
 """
