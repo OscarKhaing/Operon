@@ -875,13 +875,27 @@ async function handleCollectingInfo(
       return text("I couldn't find your selected option. Please choose an option again.");
     }
 
+    // Build payment description based on category
+    let itemName: string;
+    let itemDescription: string;
+    if (selectedOption.category === "hotel") {
+      itemName = `${selectedOption.hotelName} — ${selectedOption.roomType.name}`;
+      itemDescription = `Check-in: ${booking.travel.checkIn} → Check-out: ${booking.travel.checkOut}`;
+    } else if (selectedOption.category === "flight") {
+      itemName = `${selectedOption.airline} ${selectedOption.flightNumber}`;
+      itemDescription = `${selectedOption.origin} → ${selectedOption.destination} (${selectedOption.cabinClass})`;
+    } else {
+      itemName = selectedOption.restaurantName;
+      itemDescription = `${selectedOption.cuisine} — ${booking.restaurantDetails?.date || ""} at ${booking.restaurantDetails?.time || ""}`;
+    }
+
     const { url, sessionId } = await createCheckoutSession({
       bookingId: booking.id,
       totalPrice: selectedOption.totalPrice,
-      hotelName: selectedOption.hotelName,
-      roomType: selectedOption.roomType.name,
-      checkIn: booking.travel.checkIn,
-      checkOut: booking.travel.checkOut,
+      hotelName: itemName,
+      roomType: itemDescription,
+      checkIn: booking.travel.checkIn || booking.flightDetails?.departureDate || booking.restaurantDetails?.date || "",
+      checkOut: booking.travel.checkOut || booking.flightDetails?.returnDate || "",
       guestEmail: booking.customer.email || undefined,
       currency: booking.preferences.currency || "USD",
     });
@@ -894,7 +908,7 @@ async function handleCollectingInfo(
     addMsg(booking.id, "system", `Stripe session created: ${sessionId}`);
 
     return text(
-      `Almost there! To confirm your reservation at **${selectedOption.hotelName}**, please complete your payment of **$${selectedOption.totalPrice}** using this secure link:\n\n${url}\n\nOnce payment is complete, I'll send the reservation to the hotel immediately.`
+      `Almost there! To confirm your reservation for **${itemName}**, please complete your payment of **$${selectedOption.totalPrice}** using this secure link:\n\n${url}\n\nOnce payment is complete, I'll send the reservation immediately.`
     );
   }
 
@@ -906,7 +920,7 @@ async function handleCollectingInfo(
 
 // ─── Dispatch: dummy PDF + real email via Resend ────────────────────────────
 
-async function triggerDispatch(bookingId: string, option: BookingOption): Promise<WorkflowResult> {
+export async function triggerDispatch(bookingId: string, option: BookingOption): Promise<WorkflowResult> {
   const booking = store.getBooking(bookingId)!;
   const category = getActiveCategory(booking);
 
