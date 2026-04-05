@@ -86,6 +86,10 @@ function text(content: string): WorkflowResult {
   return { content };
 }
 
+function getOptionsForCategory(bookingId: string, category: BookingCategory): BookingOption[] {
+  return store.getOptions(bookingId).filter((o) => o.category === category);
+}
+
 // ─── Multi-category helpers ────────────────────────────────────────────────
 
 /** Get the effective active category for branching. */
@@ -574,6 +578,7 @@ async function handleMatching(bookingId: string): Promise<WorkflowResult> {
 async function handleHotelMatching(booking: BookingRequest): Promise<WorkflowResult> {
   const cachedHotels = store.getHotelCache(booking.id);
   const { options, hotelMap } = await findOptions(booking, cachedHotels);
+  store.clearOptions(booking.id);
   store.addOptions(options);
 
   if (options.length === 0) {
@@ -611,6 +616,7 @@ async function handleHotelMatching(booking: BookingRequest): Promise<WorkflowRes
 async function handleFlightMatching(booking: BookingRequest): Promise<WorkflowResult> {
   const cachedFlights = store.getFlightCache(booking.id);
   const { options } = await findFlightOptions(booking, cachedFlights);
+  store.clearOptions(booking.id);
   store.addOptions(options);
 
   if (options.length === 0) {
@@ -676,6 +682,7 @@ async function handleFlightMatching(booking: BookingRequest): Promise<WorkflowRe
 async function handleRestaurantMatching(booking: BookingRequest): Promise<WorkflowResult> {
   const cachedRestaurants = store.getRestaurantCache(booking.id);
   const { options } = await findRestaurantOptions(booking, cachedRestaurants);
+  store.clearOptions(booking.id);
   store.addOptions(options);
 
   if (options.length === 0) {
@@ -723,7 +730,8 @@ export async function selectOption(
   const booking = store.getBooking(bookingId);
   if (!booking) return text("Booking not found.");
 
-  const options = store.getOptions(bookingId);
+  const category = getActiveCategory(booking);
+  const options = getOptionsForCategory(bookingId, category);
   const topOptions = options.slice(0, 5);
 
   if (optionIndex < 0 || optionIndex >= topOptions.length) {
@@ -741,7 +749,8 @@ async function handleAwaitingSelectionText(
   booking: BookingRequest,
   customerMessage: string
 ): Promise<WorkflowResult> {
-  const options = store.getOptions(booking.id);
+  const category = getActiveCategory(booking);
+  const options = getOptionsForCategory(booking.id, category);
   const topOptions = options.slice(0, 5);
 
   const selection = await parseSelection(customerMessage, topOptions.length);
@@ -863,17 +872,21 @@ async function handleCollectingInfo(
   const missing = requiredFields.filter((f) => !collected[f]);
 
   if (missing.length === 0) {
-    // All personal info collected! → create payment session
-    addMsg(booking.id, "system", "All personal info collected. Creating payment link...");
-
-    // Trigger dispatch
-    const options = store.getOptions(booking.id);
+    // All personal info collected!
+    const options = getOptionsForCategory(booking.id, category);
     const selectedOption = booking.selectedOptionId
       ? options.find((option) => option.id === booking.selectedOptionId)
       : options[0];
     if (!selectedOption) {
       return text("I couldn't find your selected option. Please choose an option again.");
     }
+
+    if (selectedOption.category === "restaurant") {
+      addMsg(booking.id, "system", "All personal info collected. Sending reservation request...");
+      return triggerDispatch(booking.id, selectedOption);
+    }
+
+    addMsg(booking.id, "system", "All personal info collected. Creating payment link...");
 
     // Build payment description based on category
     let itemName: string;
@@ -884,9 +897,6 @@ async function handleCollectingInfo(
     } else if (selectedOption.category === "flight") {
       itemName = `${selectedOption.airline} ${selectedOption.flightNumber}`;
       itemDescription = `${selectedOption.origin} → ${selectedOption.destination} (${selectedOption.cabinClass})`;
-    } else {
-      itemName = selectedOption.restaurantName;
-      itemDescription = `${selectedOption.cuisine} — ${booking.restaurantDetails?.date || ""} at ${booking.restaurantDetails?.time || ""}`;
     }
 
     const { url, sessionId } = await createCheckoutSession({

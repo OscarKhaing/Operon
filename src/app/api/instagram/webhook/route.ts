@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { v4 as uuid } from "uuid";
 import { store } from "@/lib/store";
-import { ChatMessage, MessageMetadata, HotelOptionCard, FlightOptionCard, BookingRequest } from "@/lib/types";
+import { ChatMessage, MessageMetadata, HotelOptionCard, FlightOptionCard, RestaurantOptionCard, BookingRequest } from "@/lib/types";
 import { processMessage } from "@/lib/services/workflow";
 import {
   sendInstagramText,
@@ -217,6 +217,13 @@ async function sendInstagramResponse(
     return;
   }
 
+  if (metadata?.type === "restaurant_options") {
+    await sendInstagramText(recipientId, content);
+    const elements = buildRestaurantOptionElements(metadata.options);
+    await sendInstagramTemplate(recipientId, elements);
+    return;
+  }
+
   await sendInstagramText(recipientId, content);
 }
 
@@ -252,7 +259,27 @@ function buildFlightOptionElements(options: FlightOptionCard[]): InstagramTempla
       buttons: [
         {
           type: "postback",
-          title: `Select option ${optionIndex}`,
+          title: `Select`,
+          payload: `option:${optionIndex}:${opt.optionId}`,
+        },
+      ],
+    };
+  });
+}
+
+function buildRestaurantOptionElements(options: RestaurantOptionCard[]): InstagramTemplateElement[] {
+  return options.map((opt, idx) => {
+    const optionIndex = idx + 1;
+    const title = `${opt.restaurantName} - ${opt.cuisine}`;
+    const subtitle = `${opt.location} | $${opt.priceRange}/person | ${opt.rating} stars`;
+
+    return {
+      title,
+      subtitle,
+      buttons: [
+        {
+          type: "postback",
+          title: "Select",
           payload: `option:${optionIndex}:${opt.optionId}`,
         },
       ],
