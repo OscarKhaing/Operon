@@ -47,6 +47,8 @@ export interface BookingRequest {
   pdfUrl?: string; // URL to generated reservation PDF
   rejectedOptionIds?: string[]; // options rejected by hotels (no availability)
   cancelRequested?: boolean; // true when customer expressed cancel intent, awaiting confirmation
+  itemModel?: string; // "Flight", "Hotel", "Restaurant"
+  providerName?: string; // airline/hotel name
   createdAt: string;
   updatedAt: string;
 }

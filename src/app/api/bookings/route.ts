@@ -4,8 +4,62 @@ import { BookingRequest } from "@/lib/types";
 import { validateBookingPatch } from "@/lib/validation";
 import { v4 as uuid } from "uuid";
 
+// Transform backend booking to frontend BookingRequest
+function transformBooking(backendBooking: any): BookingRequest {
+  const statusMap: { [key: string]: BookingRequest['status'] } = {
+    'intake': 'intake',
+    'extracting': 'extracting',
+    'options presented': 'options_presented',
+    'sent to hotel': 'sent_to_hotel',
+    'confirmed': 'confirmed',
+    'cancelled': 'cancelled'
+  };
+
+  return {
+    id: backendBooking._id || backendBooking.id,
+    customer: {
+      name: backendBooking.customerName || '',
+      passport: '',
+      email: '',
+      phone: '',
+      nationality: ''
+    },
+    travel: {
+      checkIn: '',
+      checkOut: '',
+      guestCount: backendBooking.guests || 1,
+      roomCount: 1,
+      destination: backendBooking.destination || ''
+    },
+    preferences: {
+      roomType: '',
+      maxBudgetPerNight: backendBooking.budget || 0,
+      currency: 'USD',
+      specialRequests: backendBooking.notes || ''
+    },
+    status: statusMap[backendBooking.status] || 'intake',
+    assignedTo: 'Unassigned',
+    itemModel: backendBooking.itemModel,
+    providerName: backendBooking.providerName,
+    createdAt: backendBooking.createdAt || new Date().toISOString(),
+    updatedAt: backendBooking.updatedAt || new Date().toISOString()
+  };
+}
+
 export async function GET() {
-  return NextResponse.json(store.getBookings());
+  try {
+    const response = await fetch('http://localhost:5001/api/bookings');
+    if (!response.ok) {
+      throw new Error('Failed to fetch bookings from backend');
+    }
+    const backendBookings = await response.json();
+    const transformedBookings = backendBookings.map(transformBooking);
+    return NextResponse.json(transformedBookings);
+  } catch (error) {
+    console.error('Error fetching bookings:', error);
+    // Fallback to mock data if backend is not available
+    return NextResponse.json(store.getBookings());
+  }
 }
 
 export async function POST(req: Request) {

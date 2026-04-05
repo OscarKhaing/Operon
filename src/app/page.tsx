@@ -94,12 +94,17 @@ export default function DashboardPage() {
                         href={`/bookings/${b.id}`}
                         className="block p-2.5 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors"
                       >
-                        <p className="text-sm font-medium text-gray-900 truncate">
-                          {b.customer.name || "Unknown"}
-                        </p>
-                        <p className="text-xs text-gray-500 mt-0.5">
-                          {b.travel.destination} · {formatDate(b.travel.checkIn)}
-                        </p>
+                        <div className="space-y-1">
+                          <p className="text-sm font-medium text-gray-900 truncate">
+                            {b.customer.name || "Unknown"}
+                          </p>
+                          <p className="text-xs text-gray-600">
+                            {b.itemModel} · {b.providerName}
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            {b.travel.destination} · {b.travel.guestCount} guests · ${b.preferences.maxBudgetPerNight}
+                          </p>
+                        </div>
                       </Link>
                     ))}
                     {stageBookings.length === 0 && (
@@ -123,11 +128,13 @@ export default function DashboardPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-100 text-left">
-                  <th className="px-4 py-3 font-medium text-gray-500">Customer</th>
+                  <th className="px-4 py-3 font-medium text-gray-500">Customer Name</th>
+                  <th className="px-4 py-3 font-medium text-gray-500">Category</th>
+                  <th className="px-4 py-3 font-medium text-gray-500">Provider Name</th>
                   <th className="px-4 py-3 font-medium text-gray-500">Destination</th>
-                  <th className="px-4 py-3 font-medium text-gray-500">Dates</th>
+                  <th className="px-4 py-3 font-medium text-gray-500">Guests</th>
+                  <th className="px-4 py-3 font-medium text-gray-500">Budget</th>
                   <th className="px-4 py-3 font-medium text-gray-500">Status</th>
-                  <th className="px-4 py-3 font-medium text-gray-500">Operator</th>
                 </tr>
               </thead>
               <tbody>
@@ -145,15 +152,23 @@ export default function DashboardPage() {
                       </Link>
                     </td>
                     <td className="px-4 py-3 text-gray-600">
+                      {b.itemModel || "—"}
+                    </td>
+                    <td className="px-4 py-3 text-gray-600">
+                      {b.providerName || "—"}
+                    </td>
+                    <td className="px-4 py-3 text-gray-600">
                       {b.travel.destination}
                     </td>
                     <td className="px-4 py-3 text-gray-600">
-                      {formatDate(b.travel.checkIn)} — {formatDate(b.travel.checkOut)}
+                      {b.travel.guestCount}
+                    </td>
+                    <td className="px-4 py-3 text-gray-600">
+                      ${b.preferences.maxBudgetPerNight}
                     </td>
                     <td className="px-4 py-3">
                       <StatusBadge status={b.status} />
                     </td>
-                    <td className="px-4 py-3 text-gray-600">{b.assignedTo}</td>
                   </tr>
                 ))}
               </tbody>

@@ -34,6 +34,8 @@ export default function BookingsPage() {
       !search ||
       b.customer.name.toLowerCase().includes(search.toLowerCase()) ||
       b.travel.destination.toLowerCase().includes(search.toLowerCase()) ||
+      b.itemModel?.toLowerCase().includes(search.toLowerCase()) ||
+      b.providerName?.toLowerCase().includes(search.toLowerCase()) ||
       b.id.includes(search);
     const matchesStatus = statusFilter === "all" || b.status === statusFilter;
     return matchesSearch && matchesStatus;
@@ -50,7 +52,7 @@ export default function BookingsPage() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
               type="text"
-              placeholder="Search by name, destination, or ID..."
+              placeholder="Search by name, destination, item model, provider, or ID..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
@@ -79,16 +81,13 @@ export default function BookingsPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100 text-left">
-                <th className="px-4 py-3 font-medium text-gray-500">ID</th>
-                <th className="px-4 py-3 font-medium text-gray-500">Customer</th>
+                <th className="px-4 py-3 font-medium text-gray-500">Customer Name</th>
+                <th className="px-4 py-3 font-medium text-gray-500">Category</th>
+                <th className="px-4 py-3 font-medium text-gray-500">Provider Name</th>
                 <th className="px-4 py-3 font-medium text-gray-500">Destination</th>
-                <th className="px-4 py-3 font-medium text-gray-500">Check-in</th>
-                <th className="px-4 py-3 font-medium text-gray-500">Check-out</th>
                 <th className="px-4 py-3 font-medium text-gray-500">Guests</th>
-                <th className="px-4 py-3 font-medium text-gray-500">Room</th>
                 <th className="px-4 py-3 font-medium text-gray-500">Budget</th>
                 <th className="px-4 py-3 font-medium text-gray-500">Status</th>
-                <th className="px-4 py-3 font-medium text-gray-500">Operator</th>
               </tr>
             </thead>
             <tbody>
@@ -97,9 +96,6 @@ export default function BookingsPage() {
                   key={b.id}
                   className="border-b border-gray-50 hover:bg-gray-50 transition-colors"
                 >
-                  <td className="px-4 py-3 text-gray-400 font-mono text-xs">
-                    {b.id}
-                  </td>
                   <td className="px-4 py-3">
                     <Link
                       href={`/bookings/${b.id}`}
@@ -108,11 +104,10 @@ export default function BookingsPage() {
                       {b.customer.name || "—"}
                     </Link>
                   </td>
+                  <td className="px-4 py-3 text-gray-600">{b.itemModel || "—"}</td>
+                  <td className="px-4 py-3 text-gray-600">{b.providerName || "—"}</td>
                   <td className="px-4 py-3 text-gray-600">{b.travel.destination || "—"}</td>
-                  <td className="px-4 py-3 text-gray-600">{formatDate(b.travel.checkIn)}</td>
-                  <td className="px-4 py-3 text-gray-600">{formatDate(b.travel.checkOut)}</td>
                   <td className="px-4 py-3 text-gray-600">{b.travel.guestCount}</td>
-                  <td className="px-4 py-3 text-gray-600 capitalize">{b.preferences.roomType}</td>
                   <td className="px-4 py-3 text-gray-600">
                     {b.preferences.maxBudgetPerNight
                       ? `$${b.preferences.maxBudgetPerNight}`
@@ -121,12 +116,11 @@ export default function BookingsPage() {
                   <td className="px-4 py-3">
                     <StatusBadge status={b.status} />
                   </td>
-                  <td className="px-4 py-3 text-gray-600">{b.assignedTo}</td>
                 </tr>
               ))}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={10} className="px-4 py-12 text-center text-gray-400">
+                  <td colSpan={7} className="px-4 py-12 text-center text-gray-400">
                     No bookings found
                   </td>
                 </tr>
