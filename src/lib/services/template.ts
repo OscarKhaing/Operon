@@ -2,7 +2,7 @@
  * Template selection and auto-fill service.
  * Selects the right contract template and fills it with booking data.
  */
-import { BookingRequest, BookingOption, TemplateRecord, TemplateField } from "../types";
+import { BookingRequest, BookingOption, HotelBookingOption, TemplateRecord, TemplateField } from "../types";
 import { store } from "../store";
 
 export interface FilledTemplate {
@@ -16,7 +16,7 @@ export interface FilledTemplate {
 function resolveFieldValue(
   field: TemplateField,
   booking: BookingRequest,
-  option: BookingOption
+  option: HotelBookingOption
 ): string {
   switch (field.key) {
     case "guestName":
@@ -55,7 +55,7 @@ export function selectTemplate(hotelId: string): TemplateRecord | null {
 export function fillTemplate(
   template: TemplateRecord,
   booking: BookingRequest,
-  option: BookingOption
+  option: HotelBookingOption
 ): FilledTemplate {
   const fields = template.fields.map((field) => ({
     key: field.key,

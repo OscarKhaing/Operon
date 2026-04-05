@@ -56,18 +56,34 @@ function pick<T>(arr: T[]): T {
 /**
  * Simulates a hotel response synchronously.
  * Always confirms the reservation — no random outcomes.
- *
- * @param bookingId  The booking to respond to
  */
-export function simulateHotelResponse(
-  bookingId: string,
-): void {
+export function simulateHotelResponse(bookingId: string): void {
   const booking = store.getBooking(bookingId);
   if (!booking || booking.status !== "sent_to_hotel") return;
-
   const tx = store.getLatestTransaction(bookingId);
   if (!tx) return;
+  handleConfirmed(bookingId, tx.id);
+}
 
+/**
+ * Simulates an airline response synchronously. Always confirms.
+ */
+export function simulateFlightResponse(bookingId: string): void {
+  const booking = store.getBooking(bookingId);
+  if (!booking || booking.status !== "sent_to_hotel") return;
+  const tx = store.getLatestTransaction(bookingId);
+  if (!tx) return;
+  handleConfirmed(bookingId, tx.id);
+}
+
+/**
+ * Simulates a restaurant response synchronously. Always confirms.
+ */
+export function simulateRestaurantResponse(bookingId: string): void {
+  const booking = store.getBooking(bookingId);
+  if (!booking || booking.status !== "sent_to_hotel") return;
+  const tx = store.getLatestTransaction(bookingId);
+  if (!tx) return;
   handleConfirmed(bookingId, tx.id);
 }
 
@@ -175,10 +191,12 @@ export function handleNoAvailability(bookingId: string, transactionId: string): 
   if (remaining.length > 0) {
     const optionsList = remaining
       .slice(0, 5)
-      .map(
-        (opt, i) =>
-          `${i + 1}. **${opt.hotelName} - ${opt.roomType.name}** — $${opt.roomType.basePrice}/night ($${opt.totalPrice} total)`
-      )
+      .map((opt, i) => {
+        if (opt.category === "hotel") {
+          return `${i + 1}. **${opt.hotelName} - ${opt.roomType.name}** — $${opt.roomType.basePrice}/night ($${opt.totalPrice} total)`;
+        }
+        return `${i + 1}. Option — $${opt.totalPrice} total`;
+      })
       .join("\n");
 
     addMsg(

@@ -152,13 +152,13 @@ export const MOCK_MESSAGES: ChatMessage[] = [
 
 export const MOCK_OPTIONS: BookingOption[] = [
   {
-    id: "opt1", bookingId: "b2", hotelId: "h4", hotelName: "Orchid Beach Resort",
+    id: "opt1", bookingId: "b2", category: "hotel", hotelId: "h4", hotelName: "Orchid Beach Resort",
     roomType: { id: "h4-std", name: "Garden Room", basePrice: 85, currency: "USD", maxGuests: 2, amenities: ["WiFi", "Pool", "Garden View"] },
     totalPrice: 255, nightCount: 3, score: 92,
     explanation: "Best value option within budget. Garden room with pool access at a beachfront resort.",
   },
   {
-    id: "opt2", bookingId: "b2", hotelId: "h4", hotelName: "Orchid Beach Resort",
+    id: "opt2", bookingId: "b2", category: "hotel", hotelId: "h4", hotelName: "Orchid Beach Resort",
     roomType: { id: "h4-dlx", name: "Ocean View", basePrice: 150, currency: "USD", maxGuests: 3, amenities: ["WiFi", "Pool", "Ocean View", "Balcony"] },
     totalPrice: 450, nightCount: 3, score: 78,
     explanation: "Ocean view upgrade. Slightly over budget but offers premium beach experience.",

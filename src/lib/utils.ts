@@ -1,4 +1,4 @@
-import { BookingStatus } from "./types";
+import { BookingCategory, BookingStatus } from "./types";
 
 export function cn(...classes: (string | boolean | undefined | null)[]): string {
   return classes.filter(Boolean).join(" ");
@@ -23,17 +23,17 @@ export function formatDateTime(iso: string): string {
   });
 }
 
-export function statusLabel(status: BookingStatus): string {
+export function statusLabel(status: BookingStatus, category?: BookingCategory): string {
   const labels: Record<BookingStatus, string> = {
     intake: "Intake",
     extracting: "Extracting Info",
-    matching: "Finding Hotels",
+    matching: category === "flight" ? "Finding Flights" : category === "restaurant" ? "Finding Restaurants" : "Finding Hotels",
     options_presented: "Options Sent",
     selected: "Option Selected",
     collecting_info: "Collecting Info",
     awaiting_payment: "Awaiting Payment",
-    filling_template: "Filling Contract",
-    sent_to_hotel: "Sent to Hotel",
+    filling_template: "Processing",
+    sent_to_hotel: category === "flight" ? "Sent to Airline" : category === "restaurant" ? "Sent to Restaurant" : "Sent to Hotel",
     confirmed: "Confirmed",
     cancelled: "Cancelled",
   };

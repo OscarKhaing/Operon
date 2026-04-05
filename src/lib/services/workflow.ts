@@ -8,8 +8,14 @@
  *   collecting_info → sent_to_hotel → confirmed
  */
 import { store } from "../store";
-import { BookingRequest, ChatMessage, BookingOption, MessageMetadata, HotelOptionCard } from "../types";
+import {
+  BookingRequest, BookingCategory, ChatMessage, BookingOption,
+  MessageMetadata, HotelOptionCard, FlightOptionCard, RestaurantOptionCard,
+  HotelBookingOption, FlightBookingOption, RestaurantBookingOption,
+} from "../types";
 import { findOptions } from "./matching";
+import { findFlightOptions } from "./flight-matching";
+import { findRestaurantOptions } from "./restaurant-matching";
 import {
   extractPreferences,
   generatePreferenceReply,
@@ -18,12 +24,27 @@ import {
   extractPersonalInfo,
   generateChecklistReply,
   detectCancelIntent,
+  detectCategory,
+  extractFlightPreferences,
+  generateFlightPreferenceReply,
+  presentFlightOptions,
+  extractRestaurantPreferences,
+  generateRestaurantPreferenceReply,
+  presentRestaurantOptions,
 } from "./llm";
 import { generateDummyPdf } from "./pdf-dummy";
-import { sendReservationEmail, sendCancellationEmail } from "./email";
-import { simulateHotelResponse } from "./hotel-response";
+import {
+  sendReservationEmail, sendCancellationEmail,
+  sendFlightReservationEmail, sendRestaurantReservationEmail,
+} from "./email";
+import { simulateHotelResponse, simulateFlightResponse, simulateRestaurantResponse } from "./hotel-response";
 import { fetchHotelById, fetchHotels, fetchAvailableLocations } from "./hotel-api";
+<<<<<<< HEAD
 import { createCheckoutSession } from "./stripe";
+=======
+import { fetchFlights, fetchAvailableRoutes } from "./flight-api";
+import { fetchRestaurants, fetchAvailableRestaurantLocations } from "./restaurant-api";
+>>>>>>> e5fd37432bdb6d529ecfcdb711c00266fd2bc936
 import { v4 as uuid } from "uuid";
 
 /**
@@ -67,36 +88,79 @@ function text(content: string): WorkflowResult {
   return { content };
 }
 
-// ─── Phase: Collect booking preferences ─────────────────────────────────────
+// ─── Multi-category helpers ────────────────────────────────────────────────
 
-// Only destination + dates are required to search. The rest are optional filters.
-const REQUIRED_PREF_FIELDS = ["destination", "checkIn", "checkOut"] as const;
-const ALL_PREF_FIELDS = ["destination", "checkIn", "checkOut", "guestCount", "roomType", "maxBudget"] as const;
+/** Get the effective active category for branching. */
+function getActiveCategory(booking: BookingRequest): BookingCategory {
+  return booking.activeCategory || booking.category || "hotel";
+}
+
+/** Get remaining categories that haven't been completed yet. */
+function getRemainingCategories(booking: BookingRequest): BookingCategory[] {
+  const all = booking.categories || (booking.category ? [booking.category] : []);
+  const done = booking.completedCategories || [];
+  return all.filter((c) => !done.includes(c));
+}
+
+/** Format a category name nicely for display. */
+function categoryLabel(c: BookingCategory): string {
+  return c === "hotel" ? "hotel" : c === "flight" ? "flight" : "restaurant";
+}
+
+/**
+ * Transition to the next category after one is confirmed.
+ * Returns a WorkflowResult with a message about what's next, or null if nothing remains.
+ */
+function transitionToNextCategory(booking: BookingRequest): WorkflowResult | null {
+  const remaining = getRemainingCategories(booking);
+  if (remaining.length === 0) return null;
+
+  const next = remaining[0];
+  store.updateBooking(booking.id, {
+    category: next,
+    activeCategory: next,
+    status: "intake",
+  });
+
+  addMsg(booking.id, "system", `Transitioning to ${next} booking`);
+
+  return text(
+    `Now let's take care of your **${categoryLabel(next)}** booking. What details do you have in mind?`
+  );
+}
+
+// ─── Phase: Collect booking preferences (category-aware) ───────────────────
 
 async function handleCollectingPreferences(
   booking: BookingRequest,
   _customerMessage: string
 ): Promise<WorkflowResult> {
+  const category = getActiveCategory(booking);
+  switch (category) {
+    case "flight": return handleFlightPreferences(booking);
+    case "restaurant": return handleRestaurantPreferences(booking);
+    default: return handleHotelPreferences(booking);
+  }
+}
+
+// ── Hotel preferences ──
+
+const HOTEL_REQUIRED = ["destination", "checkIn", "checkOut"] as const;
+const HOTEL_ALL = ["destination", "checkIn", "checkOut", "guestCount", "roomType", "maxBudget"] as const;
+
+async function handleHotelPreferences(booking: BookingRequest): Promise<WorkflowResult> {
   const convo = recentConversation(booking.id);
-
-  // Fetch available locations for LLM to match against
   const availableLocations = await fetchAvailableLocations();
-
-  // LLM extraction with location list for standardization
   const prefs = await extractPreferences(convo, availableLocations);
 
-  // Merge extraction into booking (only non-null fields)
   const travelUpdates: Record<string, unknown> = {};
   if (prefs.checkIn) travelUpdates.checkIn = prefs.checkIn;
   if (prefs.checkOut) travelUpdates.checkOut = prefs.checkOut;
   if (prefs.guestCount) travelUpdates.guestCount = prefs.guestCount;
 
-  // Handle destination separately — detect changes for hotel cache management
   const previousDestination = booking.travel.destination;
   if (prefs.destination) {
     travelUpdates.destination = prefs.destination;
-
-    // If destination changed, clear cached hotels so we re-fetch for new location
     if (previousDestination && previousDestination !== prefs.destination) {
       store.clearHotelCache(booking.id);
       store.clearOptions(booking.id);
@@ -119,7 +183,6 @@ async function handleCollectingPreferences(
     });
   }
 
-  // Pre-load hotels for the resolved destination (partial DB retrieval)
   const resolvedDestination = prefs.destination || booking.travel.destination;
   if (resolvedDestination && !store.getHotelCache(booking.id)) {
     const hotels = await fetchHotels({ location: resolvedDestination });
@@ -130,30 +193,21 @@ async function handleCollectingPreferences(
       (loc) => loc.toLowerCase().includes(prefs.destination!.toLowerCase()) ||
                prefs.destination!.toLowerCase().includes(loc.toLowerCase())
     )) {
-      // Destination doesn't match any hotel in our pool — tell the customer early
       addMsg(booking.id, "system", `No hotels in pool for: ${resolvedDestination}`);
-      // Clear the destination so they can try again
       store.updateBooking(booking.id, {
         travel: { ...store.getBooking(booking.id)!.travel, destination: "" },
       });
       return text(
         `Unfortunately, we don't have contracted hotels in ${resolvedDestination} at the moment. ` +
         `Our current destinations include: ${availableLocations.join(", ")}.\n\n` +
-        `Would you like to choose one of these, or I can recommend checking Booking.com or Agoda for ${resolvedDestination}?`
+        `Would you like to choose one of these?`
       );
     }
   }
 
-  // Log extraction
-  const extracted = Object.entries(prefs)
-    .filter(([, v]) => v !== null)
-    .map(([k, v]) => `${k}=${v}`)
-    .join(", ");
-  if (extracted) {
-    addMsg(booking.id, "system", `Extracted preferences: ${extracted}`);
-  }
+  const extracted = Object.entries(prefs).filter(([, v]) => v !== null).map(([k, v]) => `${k}=${v}`).join(", ");
+  if (extracted) addMsg(booking.id, "system", `Extracted preferences: ${extracted}`);
 
-  // ── Determine what's known vs missing ──
   const updated = store.getBooking(booking.id)!;
   const knownFields: Record<string, string | number | null> = {
     destination: updated.travel.destination || null,
@@ -163,9 +217,9 @@ async function handleCollectingPreferences(
     roomType: updated.preferences.roomType || null,
     maxBudget: updated.preferences.maxBudgetPerNight > 0 ? updated.preferences.maxBudgetPerNight : null,
   };
-  const requiredMissing = REQUIRED_PREF_FIELDS.filter((f) => knownFields[f] === null || knownFields[f] === undefined);
-  const optionalMissing = ALL_PREF_FIELDS.filter(
-    (f) => !REQUIRED_PREF_FIELDS.includes(f as typeof REQUIRED_PREF_FIELDS[number]) && (knownFields[f] === null || knownFields[f] === undefined)
+  const requiredMissing = HOTEL_REQUIRED.filter((f) => knownFields[f] === null || knownFields[f] === undefined);
+  const optionalMissing = HOTEL_ALL.filter(
+    (f) => !HOTEL_REQUIRED.includes(f as typeof HOTEL_REQUIRED[number]) && (knownFields[f] === null || knownFields[f] === undefined)
   );
 
   if (requiredMissing.length === 0) {
@@ -175,30 +229,179 @@ async function handleCollectingPreferences(
 
   store.updateBooking(booking.id, { status: "extracting" });
   const allMissing = [...requiredMissing, ...optionalMissing];
-  const reply = await generatePreferenceReply(convo, knownFields, allMissing);
+  const reply = await generatePreferenceReply(convo, knownFields, allMissing, booking.conciseMode);
   return text(reply);
 }
 
-// ─── Phase: Hotel matching (rule-based) + LLM presentation ─────────────────
+// ── Flight preferences ──
+
+const FLIGHT_REQUIRED = ["origin", "destination", "departureDate"] as const;
+const FLIGHT_ALL = ["origin", "destination", "departureDate", "returnDate", "passengers", "cabinClass", "maxBudget"] as const;
+
+async function handleFlightPreferences(booking: BookingRequest): Promise<WorkflowResult> {
+  const convo = recentConversation(booking.id);
+  const availableRoutes = await fetchAvailableRoutes();
+  const prefs = await extractFlightPreferences(convo, availableRoutes);
+
+  // Merge into flightDetails
+  const fd = booking.flightDetails || { origin: "", destination: "", departureDate: "", returnDate: "", passengers: 0, cabinClass: "", maxBudget: 0 };
+  const updates: Record<string, unknown> = {};
+  if (prefs.origin) updates.origin = prefs.origin;
+  if (prefs.destination) updates.destination = prefs.destination;
+  if (prefs.departureDate) updates.departureDate = prefs.departureDate;
+  if (prefs.returnDate) updates.returnDate = prefs.returnDate;
+  if (prefs.passengers) updates.passengers = prefs.passengers;
+  if (prefs.cabinClass) updates.cabinClass = prefs.cabinClass;
+  if (prefs.maxBudget) updates.maxBudget = prefs.maxBudget;
+
+  if (Object.keys(updates).length > 0) {
+    const newFd = { ...fd, ...updates };
+    store.updateBooking(booking.id, { flightDetails: newFd as BookingRequest["flightDetails"] });
+
+    // If destination changed, clear flight cache
+    if (updates.destination && fd.destination && fd.destination !== updates.destination) {
+      store.clearFlightCache(booking.id);
+      store.clearOptions(booking.id);
+    }
+  }
+
+  // Pre-load flights
+  const resolvedDest = prefs.destination || fd.destination;
+  const resolvedOrigin = prefs.origin || fd.origin;
+  if (resolvedDest && resolvedOrigin && !store.getFlightCache(booking.id)) {
+    const flights = await fetchFlights({ origin: resolvedOrigin, destination: resolvedDest });
+    if (flights.length > 0) {
+      store.setFlightCache(booking.id, flights);
+      addMsg(booking.id, "system", `Loaded ${flights.length} flights for ${resolvedOrigin} → ${resolvedDest}`);
+    }
+  }
+
+  const extracted = Object.entries(prefs).filter(([, v]) => v !== null).map(([k, v]) => `${k}=${v}`).join(", ");
+  if (extracted) addMsg(booking.id, "system", `Extracted flight preferences: ${extracted}`);
+
+  const updatedBooking = store.getBooking(booking.id)!;
+  const ufd = updatedBooking.flightDetails || fd;
+  const knownFields: Record<string, string | number | null> = {
+    origin: ufd.origin || null,
+    destination: ufd.destination || null,
+    departureDate: ufd.departureDate || null,
+    returnDate: ufd.returnDate || null,
+    passengers: ufd.passengers > 0 ? ufd.passengers : null,
+    cabinClass: ufd.cabinClass || null,
+    maxBudget: ufd.maxBudget > 0 ? ufd.maxBudget : null,
+  };
+  const requiredMissing = FLIGHT_REQUIRED.filter((f) => !knownFields[f]);
+  const optionalMissing = FLIGHT_ALL.filter(
+    (f) => !FLIGHT_REQUIRED.includes(f as typeof FLIGHT_REQUIRED[number]) && !knownFields[f]
+  );
+
+  if (requiredMissing.length === 0) {
+    store.updateBooking(booking.id, { status: "matching" });
+    return handleMatching(booking.id);
+  }
+
+  store.updateBooking(booking.id, { status: "extracting" });
+  const allMissing = [...requiredMissing, ...optionalMissing];
+  const reply = await generateFlightPreferenceReply(convo, knownFields, allMissing, booking.conciseMode);
+  return text(reply);
+}
+
+// ── Restaurant preferences ──
+
+const RESTAURANT_REQUIRED = ["location", "date", "time"] as const;
+const RESTAURANT_ALL = ["location", "date", "time", "partySize", "cuisine", "priceRange"] as const;
+
+async function handleRestaurantPreferences(booking: BookingRequest): Promise<WorkflowResult> {
+  const convo = recentConversation(booking.id);
+  const availableLocations = await fetchAvailableRestaurantLocations();
+  const prefs = await extractRestaurantPreferences(convo, availableLocations);
+
+  // Merge into restaurantDetails
+  const rd = booking.restaurantDetails || { location: "", date: "", time: "", partySize: 0, cuisine: "", priceRange: "" };
+  const updates: Record<string, unknown> = {};
+  if (prefs.location) updates.location = prefs.location;
+  if (prefs.date) updates.date = prefs.date;
+  if (prefs.time) updates.time = prefs.time;
+  if (prefs.partySize) updates.partySize = prefs.partySize;
+  if (prefs.cuisine) updates.cuisine = prefs.cuisine;
+  if (prefs.priceRange) updates.priceRange = prefs.priceRange;
+
+  if (Object.keys(updates).length > 0) {
+    const newRd = { ...rd, ...updates };
+    store.updateBooking(booking.id, { restaurantDetails: newRd as BookingRequest["restaurantDetails"] });
+
+    if (updates.location && rd.location && rd.location !== updates.location) {
+      store.clearRestaurantCache(booking.id);
+      store.clearOptions(booking.id);
+    }
+  }
+
+  // Pre-load restaurants
+  const resolvedLocation = prefs.location || rd.location;
+  if (resolvedLocation && !store.getRestaurantCache(booking.id)) {
+    const restaurants = await fetchRestaurants({ location: resolvedLocation });
+    if (restaurants.length > 0) {
+      store.setRestaurantCache(booking.id, restaurants);
+      addMsg(booking.id, "system", `Loaded ${restaurants.length} restaurants for ${resolvedLocation}`);
+    }
+  }
+
+  const extracted = Object.entries(prefs).filter(([, v]) => v !== null).map(([k, v]) => `${k}=${v}`).join(", ");
+  if (extracted) addMsg(booking.id, "system", `Extracted restaurant preferences: ${extracted}`);
+
+  const updatedBooking = store.getBooking(booking.id)!;
+  const urd = updatedBooking.restaurantDetails || rd;
+  const knownFields: Record<string, string | number | null> = {
+    location: urd.location || null,
+    date: urd.date || null,
+    time: urd.time || null,
+    partySize: urd.partySize > 0 ? urd.partySize : null,
+    cuisine: urd.cuisine || null,
+    priceRange: urd.priceRange || null,
+  };
+  const requiredMissing = RESTAURANT_REQUIRED.filter((f) => !knownFields[f]);
+  const optionalMissing = RESTAURANT_ALL.filter(
+    (f) => !RESTAURANT_REQUIRED.includes(f as typeof RESTAURANT_REQUIRED[number]) && !knownFields[f]
+  );
+
+  if (requiredMissing.length === 0) {
+    store.updateBooking(booking.id, { status: "matching" });
+    return handleMatching(booking.id);
+  }
+
+  store.updateBooking(booking.id, { status: "extracting" });
+  const allMissing = [...requiredMissing, ...optionalMissing];
+  const reply = await generateRestaurantPreferenceReply(convo, knownFields, allMissing, booking.conciseMode);
+  return text(reply);
+}
+
+// ─── Phase: Matching (rule-based) + LLM presentation — category-aware ─────
 
 async function handleMatching(bookingId: string): Promise<WorkflowResult> {
   const booking = store.getBooking(bookingId)!;
-  const cachedHotels = store.getHotelCache(bookingId);
+  const category = getActiveCategory(booking);
+
+  switch (category) {
+    case "flight": return handleFlightMatching(booking);
+    case "restaurant": return handleRestaurantMatching(booking);
+    default: return handleHotelMatching(booking);
+  }
+}
+
+async function handleHotelMatching(booking: BookingRequest): Promise<WorkflowResult> {
+  const cachedHotels = store.getHotelCache(booking.id);
   const { options, hotelMap } = await findOptions(booking, cachedHotels);
   store.addOptions(options);
 
   if (options.length === 0) {
-    store.updateBooking(bookingId, { status: "extracting" });
+    store.updateBooking(booking.id, { status: "extracting" });
     return text("I couldn't find any hotels matching your criteria in our contracted pool. Could you consider a different destination, adjust your dates, or increase your budget?");
   }
 
-  store.updateBooking(bookingId, { status: "options_presented" });
+  store.updateBooking(booking.id, { status: "options_presented" });
+  addMsg(booking.id, "system", `Found ${options.length} hotel options. Top score: ${options[0].score}`);
 
-  // System log
-  addMsg(bookingId, "system", `Found ${options.length} options. Top score: ${options[0].score}`);
-
-  // Build structured option cards for web UI
-  const top = options.slice(0, 5);
+  const top = options.slice(0, 5) as HotelBookingOption[];
   const optionCards: HotelOptionCard[] = top.map((o) => ({
     optionId: o.id,
     hotelName: o.hotelName,
@@ -212,7 +415,6 @@ async function handleMatching(bookingId: string): Promise<WorkflowResult> {
     explanation: o.explanation,
   }));
 
-  // Also generate plain-text version via LLM (for WhatsApp / fallback)
   const customerName = booking.customer.name || "there";
   const plainText = await presentOptions(
     customerName,
@@ -220,10 +422,84 @@ async function handleMatching(bookingId: string): Promise<WorkflowResult> {
     optionCards.map((o, i) => ({ number: i + 1, ...o }))
   );
 
-  return {
-    content: plainText,
-    metadata: { type: "hotel_options", options: optionCards },
-  };
+  return { content: plainText, metadata: { type: "hotel_options", options: optionCards } };
+}
+
+async function handleFlightMatching(booking: BookingRequest): Promise<WorkflowResult> {
+  const cachedFlights = store.getFlightCache(booking.id);
+  const { options } = await findFlightOptions(booking, cachedFlights);
+  store.addOptions(options);
+
+  if (options.length === 0) {
+    store.updateBooking(booking.id, { status: "extracting" });
+    return text("I couldn't find any flights matching your criteria. Could you consider different dates, a different route, or adjust your budget?");
+  }
+
+  store.updateBooking(booking.id, { status: "options_presented" });
+  addMsg(booking.id, "system", `Found ${options.length} flight options. Top score: ${options[0].score}`);
+
+  const top = options.slice(0, 5) as FlightBookingOption[];
+  const optionCards: FlightOptionCard[] = top.map((o) => ({
+    optionId: o.id,
+    airline: o.airline,
+    flightNumber: o.flightNumber,
+    origin: o.origin,
+    destination: o.destination,
+    departureDate: o.departureDate,
+    returnDate: o.returnDate,
+    cabinClass: o.cabinClass,
+    price: o.totalPrice,
+    score: o.score,
+    explanation: o.explanation,
+  }));
+
+  const customerName = booking.customer.name || "there";
+  const fd = booking.flightDetails;
+  const route = fd ? `${fd.origin} → ${fd.destination}` : "your route";
+  const plainText = await presentFlightOptions(
+    customerName,
+    route,
+    optionCards.map((o, i) => ({ number: i + 1, ...o }))
+  );
+
+  return { content: plainText, metadata: { type: "flight_options", options: optionCards } };
+}
+
+async function handleRestaurantMatching(booking: BookingRequest): Promise<WorkflowResult> {
+  const cachedRestaurants = store.getRestaurantCache(booking.id);
+  const { options } = await findRestaurantOptions(booking, cachedRestaurants);
+  store.addOptions(options);
+
+  if (options.length === 0) {
+    store.updateBooking(booking.id, { status: "extracting" });
+    return text("I couldn't find any restaurants matching your criteria. Could you consider a different location, cuisine, or price range?");
+  }
+
+  store.updateBooking(booking.id, { status: "options_presented" });
+  addMsg(booking.id, "system", `Found ${options.length} restaurant options. Top score: ${options[0].score}`);
+
+  const top = options.slice(0, 5) as RestaurantBookingOption[];
+  const optionCards: RestaurantOptionCard[] = top.map((o) => ({
+    optionId: o.id,
+    restaurantName: o.restaurantName,
+    cuisine: o.cuisine,
+    location: o.location,
+    priceRange: o.priceRange,
+    rating: o.rating,
+    amenities: o.amenities,
+    score: o.score,
+    explanation: o.explanation,
+  }));
+
+  const customerName = booking.customer.name || "there";
+  const location = booking.restaurantDetails?.location || booking.travel.destination;
+  const plainText = await presentRestaurantOptions(
+    customerName,
+    location,
+    optionCards.map((o, i) => ({ number: i + 1, ...o }))
+  );
+
+  return { content: plainText, metadata: { type: "restaurant_options", options: optionCards } };
 }
 
 // ─── Phase: Awaiting customer selection ─────────────────────────────────────
@@ -287,6 +563,7 @@ async function handleAwaitingSelectionText(
 
 /**
  * Shared logic after a valid selection (from either click or LLM parse).
+ * Category-aware: generates different confirmation messages and info requests.
  */
 function confirmSelection(
   booking: BookingRequest,
@@ -298,37 +575,58 @@ function confirmSelection(
     selectedOptionId: chosen.id,
   });
 
-  addMsg(
-    booking.id,
-    "system",
-    `Customer selected option ${displayNumber}: ${chosen.hotelName} - ${chosen.roomType.name} ($${chosen.totalPrice})`
-  );
+  let selectionSummary: string;
+  let confirmMsg: string;
 
+  if (chosen.category === "hotel") {
+    const h = chosen as HotelBookingOption;
+    selectionSummary = `${h.hotelName} - ${h.roomType.name} ($${h.totalPrice})`;
+    confirmMsg = `Great choice! You've selected **${h.hotelName} - ${h.roomType.name}** at $${h.roomType.basePrice}/night ($${h.totalPrice} total).\n\nTo complete the reservation, I'll need a few personal details. Could you please provide:\n1. Your full name (as on passport)\n2. Passport number\n3. Nationality\n4. Email address\n5. Phone number`;
+  } else if (chosen.category === "flight") {
+    const f = chosen as FlightBookingOption;
+    selectionSummary = `${f.airline} ${f.flightNumber} ${f.origin} → ${f.destination} ($${f.totalPrice})`;
+    confirmMsg = `Great choice! You've selected **${f.airline} ${f.flightNumber}** (${f.origin} → ${f.destination}, ${f.cabinClass}) for $${f.totalPrice}.\n\nTo complete the booking, I'll need a few personal details. Could you please provide:\n1. Your full name (as on passport)\n2. Passport number\n3. Nationality\n4. Email address\n5. Phone number`;
+  } else {
+    const r = chosen as RestaurantBookingOption;
+    selectionSummary = `${r.restaurantName} - ${r.cuisine} ($${r.priceRange}/person)`;
+    confirmMsg = `Great choice! You've selected **${r.restaurantName}** (${r.cuisine} in ${r.location}).\n\nTo complete the reservation, I'll need a few details. Could you please provide:\n1. Your full name\n2. Email address\n3. Phone number`;
+  }
+
+  addMsg(booking.id, "system", `Customer selected option ${displayNumber}: ${selectionSummary}`);
   store.updateBooking(booking.id, { status: "collecting_info" });
 
-  return text(
-    `Great choice! You've selected **${chosen.hotelName} - ${chosen.roomType.name}** at $${chosen.roomType.basePrice}/night ($${chosen.totalPrice} total).\n\nTo complete the reservation, I'll need a few personal details. Could you please provide:\n1. Your full name (as on passport)\n2. Passport number\n3. Nationality\n4. Email address\n5. Phone number`
-  );
+  return text(confirmMsg);
 }
 
 // ─── Phase: Collect personal info via checklist ─────────────────────────────
 
-const PERSONAL_FIELDS = ["name", "passport", "nationality", "email", "phone"] as const;
+const HOTEL_FLIGHT_FIELDS = ["name", "passport", "nationality", "email", "phone"] as const;
+const RESTAURANT_FIELDS = ["name", "email", "phone"] as const;
+
+function getPersonalFields(category: BookingCategory | undefined): readonly string[] {
+  return category === "restaurant" ? RESTAURANT_FIELDS : HOTEL_FLIGHT_FIELDS;
+}
 
 async function handleCollectingInfo(
   booking: BookingRequest,
   customerMessage: string
 ): Promise<WorkflowResult> {
+  const category = getActiveCategory(booking);
+  const requiredFields = getPersonalFields(category);
+
   // LLM extraction of personal info from latest message
   const extracted = await extractPersonalInfo(customerMessage);
 
   // Merge into booking customer — only fill empty fields to prevent LLM overwrites
   const customerUpdates: Record<string, string> = {};
   if (extracted.name && !booking.customer.name) customerUpdates.name = extracted.name;
-  if (extracted.passport && !booking.customer.passport) customerUpdates.passport = extracted.passport;
-  if (extracted.nationality && !booking.customer.nationality) customerUpdates.nationality = extracted.nationality;
   if (extracted.email && !booking.customer.email) customerUpdates.email = extracted.email;
   if (extracted.phone && !booking.customer.phone) customerUpdates.phone = extracted.phone;
+  // Passport and nationality only for hotel/flight
+  if (category !== "restaurant") {
+    if (extracted.passport && !booking.customer.passport) customerUpdates.passport = extracted.passport;
+    if (extracted.nationality && !booking.customer.nationality) customerUpdates.nationality = extracted.nationality;
+  }
 
   if (Object.keys(customerUpdates).length > 0) {
     store.updateBooking(booking.id, {
@@ -347,17 +645,23 @@ async function handleCollectingInfo(
   // Check what's still missing
   const collected: Record<string, string | null> = {
     name: updated.customer.name || null,
-    passport: updated.customer.passport || null,
-    nationality: updated.customer.nationality || null,
     email: updated.customer.email || null,
     phone: updated.customer.phone || null,
   };
-  const missing = PERSONAL_FIELDS.filter((f) => !collected[f]);
+  if (category !== "restaurant") {
+    collected.passport = updated.customer.passport || null;
+    collected.nationality = updated.customer.nationality || null;
+  }
+  const missing = requiredFields.filter((f) => !collected[f]);
 
   if (missing.length === 0) {
     // All personal info collected! → create payment session
     addMsg(booking.id, "system", "All personal info collected. Creating payment link...");
 
+<<<<<<< HEAD
+=======
+    // Trigger dispatch
+>>>>>>> e5fd37432bdb6d529ecfcdb711c00266fd2bc936
     const options = store.getOptions(booking.id);
     const selectedOption = booking.selectedOptionId
       ? options.find((option) => option.id === booking.selectedOptionId)
@@ -391,18 +695,28 @@ async function handleCollectingInfo(
 
   // Still collecting — LLM generates natural follow-up
   const convoSnippet = recentConversation(booking.id, 4);
-  const reply = await generateChecklistReply(convoSnippet, collected, missing);
+  const reply = await generateChecklistReply(convoSnippet, collected, missing as string[]);
   return text(reply);
 }
 
 // ─── Dispatch: dummy PDF + real email via Resend ────────────────────────────
 
-export async function triggerDispatch(bookingId: string, option: BookingOption): Promise<WorkflowResult> {
+async function triggerDispatch(bookingId: string, option: BookingOption): Promise<WorkflowResult> {
+  const booking = store.getBooking(bookingId)!;
+  const category = getActiveCategory(booking);
+
+  switch (category) {
+    case "flight": return triggerFlightDispatch(bookingId, option as FlightBookingOption);
+    case "restaurant": return triggerRestaurantDispatch(bookingId, option as RestaurantBookingOption);
+    default: return triggerHotelDispatch(bookingId, option as HotelBookingOption);
+  }
+}
+
+async function triggerHotelDispatch(bookingId: string, option: HotelBookingOption): Promise<WorkflowResult> {
   const booking = store.getBooking(bookingId)!;
   const hotel = await fetchHotelById(option.hotelId);
   const hotelEmail = hotel?.contactEmail || "hotel@example.com";
 
-  // 1. Generate dummy PDF (replace with real PDF generation later)
   const pdfResult = generateDummyPdf({
     bookingId,
     guestName: booking.customer.name,
@@ -423,7 +737,6 @@ export async function triggerDispatch(bookingId: string, option: BookingOption):
   store.updateBooking(bookingId, { pdfUrl: pdfResult.pdfPath });
   addMsg(bookingId, "system", `PDF generated: ${pdfResult.pdfPath}`);
 
-  // 2. Send reservation email to hotel via Resend
   const emailResult = await sendReservationEmail({
     hotelEmail,
     hotelName: option.hotelName,
@@ -447,38 +760,150 @@ export async function triggerDispatch(bookingId: string, option: BookingOption):
     addMsg(bookingId, "system", `Email to ${emailResult.sentTo} failed: ${emailResult.error}`);
   }
 
-  // 3. Create transaction record and update booking status
   store.createTransaction({
-    id: uuid(),
-    bookingId,
-    selectedOptionId: option.id,
-    documentUrl: pdfResult.pdfPath,
-    sentAt: new Date().toISOString(),
-    confirmedAt: null,
-    confirmationCode: null,
-    status: "sent",
+    id: uuid(), bookingId, selectedOptionId: option.id,
+    documentUrl: pdfResult.pdfPath, sentAt: new Date().toISOString(),
+    confirmedAt: null, confirmationCode: null, status: "sent",
   });
   store.updateBooking(bookingId, { status: "sent_to_hotel" });
-
-  // 4. Simulate hotel response (confirmed / more info needed / no availability)
   simulateHotelResponse(bookingId);
 
-  // The simulation runs synchronously above and always confirms,
-  // so the booking is already in "confirmed" state. Return a
-  // summary without a duplicate confirmation message (the
-  // simulator already added its own agent + system messages).
+  // Track this category as completed
+  const completed = [...(booking.completedCategories || []), "hotel" as BookingCategory];
+  store.updateBooking(bookingId, { completedCategories: completed });
+
   const updatedBooking = store.getBooking(bookingId)!;
-  const tx2 = store.getLatestTransaction(bookingId);
-  const confirmationCode = tx2?.confirmationCode ?? "";
+  const tx = store.getLatestTransaction(bookingId);
+  const code = tx?.confirmationCode ?? "";
 
   const emailNote = emailResult.success
     ? `The reservation details have been sent to **${option.hotelName}** (${hotelEmail}).`
     : `The reservation was prepared for **${option.hotelName}**, but the email couldn't be delivered right now. Our team will follow up manually.`;
 
+  const remaining = getRemainingCategories(updatedBooking);
+  const nextHint = remaining.length > 0
+    ? `\n\nNext up: your **${categoryLabel(remaining[0])}** booking!`
+    : "";
+
   return text(
     `${emailNote}\n\nHere's your summary:\n- Guest: ${updatedBooking.customer.name}\n- Hotel: ${option.hotelName} - ${option.roomType.name}\n- Dates: ${updatedBooking.travel.checkIn} to ${updatedBooking.travel.checkOut}\n- Total: $${option.totalPrice}` +
-    (confirmationCode ? `\n- Confirmation Code: **${confirmationCode}**` : "") +
-    `\n\nYou're all set!`
+    (code ? `\n- Confirmation Code: **${code}**` : "") +
+    nextHint
+  );
+}
+
+async function triggerFlightDispatch(bookingId: string, option: FlightBookingOption): Promise<WorkflowResult> {
+  const booking = store.getBooking(bookingId)!;
+  const airlineEmail = "airline@example.com";
+
+  const emailResult = await sendFlightReservationEmail({
+    airlineEmail,
+    airlineName: option.airline,
+    guestName: booking.customer.name,
+    passport: booking.customer.passport,
+    nationality: booking.customer.nationality,
+    guestEmail: booking.customer.email,
+    guestPhone: booking.customer.phone,
+    flightNumber: option.flightNumber,
+    origin: option.origin,
+    destination: option.destination,
+    departureDate: option.departureDate,
+    returnDate: option.returnDate || "",
+    cabinClass: option.cabinClass,
+    passengers: booking.flightDetails?.passengers || 1,
+    totalPrice: option.totalPrice,
+    currency: "USD",
+  });
+
+  if (emailResult.success) {
+    addMsg(bookingId, "system", `Email sent to ${emailResult.sentTo} via Resend (ID: ${emailResult.emailId})`);
+  } else {
+    addMsg(bookingId, "system", `Email to ${emailResult.sentTo} failed: ${emailResult.error}`);
+  }
+
+  store.createTransaction({
+    id: uuid(), bookingId, selectedOptionId: option.id,
+    documentUrl: null, sentAt: new Date().toISOString(),
+    confirmedAt: null, confirmationCode: null, status: "sent",
+  });
+  store.updateBooking(bookingId, { status: "sent_to_hotel" });
+  simulateFlightResponse(bookingId);
+
+  const completed = [...(booking.completedCategories || []), "flight" as BookingCategory];
+  store.updateBooking(bookingId, { completedCategories: completed });
+
+  const updatedBooking = store.getBooking(bookingId)!;
+  const tx = store.getLatestTransaction(bookingId);
+  const code = tx?.confirmationCode ?? "";
+
+  const emailNote = emailResult.success
+    ? `The booking details have been sent to **${option.airline}**.`
+    : `The booking was prepared for **${option.airline}**, but the email couldn't be delivered right now. Our team will follow up manually.`;
+
+  const remaining = getRemainingCategories(updatedBooking);
+  const nextHint = remaining.length > 0
+    ? `\n\nNext up: your **${categoryLabel(remaining[0])}** booking!`
+    : "";
+
+  return text(
+    `${emailNote}\n\nHere's your summary:\n- Passenger: ${updatedBooking.customer.name}\n- Flight: ${option.airline} ${option.flightNumber}\n- Route: ${option.origin} → ${option.destination}\n- Class: ${option.cabinClass}\n- Total: $${option.totalPrice}` +
+    (code ? `\n- Confirmation Code: **${code}**` : "") +
+    nextHint
+  );
+}
+
+async function triggerRestaurantDispatch(bookingId: string, option: RestaurantBookingOption): Promise<WorkflowResult> {
+  const booking = store.getBooking(bookingId)!;
+  const restaurantEmail = "restaurant@example.com";
+  const rd = booking.restaurantDetails;
+
+  const emailResult = await sendRestaurantReservationEmail({
+    restaurantEmail,
+    restaurantName: option.restaurantName,
+    guestName: booking.customer.name,
+    guestEmail: booking.customer.email,
+    guestPhone: booking.customer.phone,
+    date: rd?.date || "",
+    time: rd?.time || "",
+    partySize: rd?.partySize || 2,
+    cuisine: option.cuisine,
+    specialRequests: booking.preferences.specialRequests,
+  });
+
+  if (emailResult.success) {
+    addMsg(bookingId, "system", `Email sent to ${emailResult.sentTo} via Resend (ID: ${emailResult.emailId})`);
+  } else {
+    addMsg(bookingId, "system", `Email to ${emailResult.sentTo} failed: ${emailResult.error}`);
+  }
+
+  store.createTransaction({
+    id: uuid(), bookingId, selectedOptionId: option.id,
+    documentUrl: null, sentAt: new Date().toISOString(),
+    confirmedAt: null, confirmationCode: null, status: "sent",
+  });
+  store.updateBooking(bookingId, { status: "sent_to_hotel" });
+  simulateRestaurantResponse(bookingId);
+
+  const completed = [...(booking.completedCategories || []), "restaurant" as BookingCategory];
+  store.updateBooking(bookingId, { completedCategories: completed });
+
+  const updatedBooking = store.getBooking(bookingId)!;
+  const tx = store.getLatestTransaction(bookingId);
+  const code = tx?.confirmationCode ?? "";
+
+  const emailNote = emailResult.success
+    ? `The reservation has been sent to **${option.restaurantName}**.`
+    : `The reservation was prepared for **${option.restaurantName}**, but the email couldn't be delivered right now. Our team will follow up manually.`;
+
+  const remaining = getRemainingCategories(updatedBooking);
+  const nextHint = remaining.length > 0
+    ? `\n\nNext up: your **${categoryLabel(remaining[0])}** booking!`
+    : "";
+
+  return text(
+    `${emailNote}\n\nHere's your summary:\n- Guest: ${updatedBooking.customer.name}\n- Restaurant: ${option.restaurantName} (${option.cuisine})\n- Date: ${rd?.date || "TBD"} at ${rd?.time || "TBD"}\n- Party size: ${rd?.partySize || 2}` +
+    (code ? `\n- Confirmation Code: **${code}**` : "") +
+    nextHint
   );
 }
 
@@ -542,30 +967,32 @@ export async function cancelBooking(
     store.updateTransaction(tx.id, { status: "rejected" });
   }
 
-  // Send cancellation email to hotel if reservation was dispatched
+  // Send cancellation email to provider if reservation was dispatched
   if (opts.sendEmail && ["sent_to_hotel", "confirmed"].includes(booking.status)) {
     const selectedOption = tx ? store.getOptions(bookingId).find((o) => o.id === tx.selectedOptionId) : null;
-    const hotel = selectedOption ? await fetchHotelById(selectedOption.hotelId) : null;
 
-    if (hotel && selectedOption) {
-      const emailResult = await sendCancellationEmail({
-        hotelEmail: hotel.contactEmail,
-        hotelName: hotel.name,
-        guestName: booking.customer.name,
-        roomType: selectedOption.roomType.name,
-        checkIn: booking.travel.checkIn,
-        checkOut: booking.travel.checkOut,
-        confirmationCode: tx?.confirmationCode,
-        bookingId,
-      });
-
-      addMsg(
-        bookingId,
-        "system",
-        emailResult.success
-          ? `Cancellation email sent to ${emailResult.sentTo} (ID: ${emailResult.emailId})`
-          : `Cancellation email to ${emailResult.sentTo} failed: ${emailResult.error}`,
-      );
+    if (selectedOption && selectedOption.category === "hotel") {
+      const hotel = await fetchHotelById(selectedOption.hotelId);
+      if (hotel) {
+        const emailResult = await sendCancellationEmail({
+          hotelEmail: hotel.contactEmail,
+          hotelName: hotel.name,
+          guestName: booking.customer.name,
+          roomType: selectedOption.roomType.name,
+          checkIn: booking.travel.checkIn,
+          checkOut: booking.travel.checkOut,
+          confirmationCode: tx?.confirmationCode,
+          bookingId,
+        });
+        addMsg(bookingId, "system",
+          emailResult.success
+            ? `Cancellation email sent to ${emailResult.sentTo} (ID: ${emailResult.emailId})`
+            : `Cancellation email to ${emailResult.sentTo} failed: ${emailResult.error}`,
+        );
+      }
+    } else if (selectedOption) {
+      // For flights/restaurants, log the cancellation (emails can be added later)
+      addMsg(bookingId, "system", `Cancellation processed for ${selectedOption.category} booking.`);
     }
   }
 
@@ -581,9 +1008,11 @@ function enterCancelConfirmation(booking: BookingRequest): WorkflowResult {
   if (booking.status === "sent_to_hotel") {
     const tx = store.getLatestTransaction(booking.id);
     const option = tx ? store.getOptions(booking.id).find((o) => o.id === tx.selectedOptionId) : null;
-    const hotelName = option?.hotelName || "the hotel";
+    const providerName = option
+      ? (option.category === "hotel" ? option.hotelName : option.category === "flight" ? (option as FlightBookingOption).airline : (option as RestaurantBookingOption).restaurantName)
+      : "the provider";
     return text(
-      `Are you sure you'd like to cancel? A reservation request has already been sent to **${hotelName}**. I'll need to notify them of the cancellation.\n\nPlease reply **yes** or **no**.`
+      `Are you sure you'd like to cancel? A reservation request has already been sent to **${providerName}**. I'll need to notify them of the cancellation.\n\nPlease reply **yes** or **no**.`
     );
   }
 
@@ -648,7 +1077,6 @@ export async function processMessage(
   }
 
   // ── Direct option selection from web UI click ──
-  // Bypasses LLM entirely — deterministic, instant.
   if (metadata?.type === "option_selected") {
     return selectOption(bookingId, metadata.optionIndex);
   }
@@ -659,6 +1087,32 @@ export async function processMessage(
     if (cancelCheck.intent === "cancel") {
       return enterCancelConfirmation(booking);
     }
+  }
+
+  // ── Detect booking category at intake if not yet set ──
+  if (booking.status === "intake" && !booking.category) {
+    const { categories } = await detectCategory(customerMessage);
+    if (categories.length > 0) {
+      const first = categories[0];
+      store.updateBooking(booking.id, {
+        category: first,
+        activeCategory: first,
+        categories: categories,
+        completedCategories: [],
+      });
+      if (categories.length > 1) {
+        addMsg(booking.id, "system", `Categories detected: ${categories.join(", ")}. Starting with ${first}.`);
+      } else {
+        addMsg(booking.id, "system", `Category detected: ${first}`);
+      }
+    } else {
+      return text("I can help you book a hotel, flight, or restaurant reservation — or all of them at once! Which would you like?");
+    }
+  }
+
+  // ── When confirmed: check for remaining categories or offer others ──
+  if (booking.status === "confirmed") {
+    return handlePostConfirmation(booking, customerMessage);
   }
 
   // ── Route based on current workflow state ──
@@ -683,13 +1137,56 @@ export async function processMessage(
     case "sent_to_hotel":
       return handleSentToHotel(booking, customerMessage);
 
-    case "confirmed":
-      return text("Your booking is confirmed! Is there anything else I can help you with?");
-
     case "cancelled":
       return text("This booking has been cancelled. Would you like to start a new booking?");
 
     default:
       return text("I'm not sure what to do next. Let me connect you with an operator.");
   }
+}
+
+// ─── Post-confirmation: transition to next category or offer others ────────
+
+async function handlePostConfirmation(
+  booking: BookingRequest,
+  customerMessage: string,
+): Promise<WorkflowResult> {
+  // Check if there are remaining categories from the original multi-booking request
+  const remaining = getRemainingCategories(booking);
+
+  if (remaining.length > 0) {
+    // Auto-transition to the next category
+    const result = transitionToNextCategory(booking);
+    if (result) return result;
+  }
+
+  // No remaining pre-selected categories — check if user wants to book something else
+  const completed = booking.completedCategories || [];
+  const allCategories: BookingCategory[] = ["hotel", "flight", "restaurant"];
+  const available = allCategories.filter((c) => !completed.includes(c));
+
+  if (available.length === 0) {
+    return text("All three booking types are confirmed! Is there anything else I can help you with?");
+  }
+
+  // Try to detect if the user is requesting a new category
+  const { categories } = await detectCategory(customerMessage);
+  const newCategories = categories.filter((c) => !completed.includes(c));
+
+  if (newCategories.length > 0) {
+    const first = newCategories[0];
+    const allNew = [...(booking.categories || []), ...newCategories.filter((c) => !(booking.categories || []).includes(c))];
+    store.updateBooking(booking.id, {
+      category: first,
+      activeCategory: first,
+      categories: allNew,
+      status: "intake",
+    });
+    addMsg(booking.id, "system", `Adding ${newCategories.join(", ")} to booking`);
+    return text(`Let's get your **${categoryLabel(first)}** booking started! What details do you have?`);
+  }
+
+  // Generic follow-up — offer what's available
+  const availableLabels = available.map(categoryLabel).join(", ");
+  return text(`Your ${categoryLabel(getActiveCategory(booking))} booking is confirmed! I can also help you book: ${availableLabels}. Would you like to continue with any of those?`);
 }

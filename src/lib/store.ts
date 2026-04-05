@@ -5,6 +5,8 @@
 import {
   BookingRequest,
   HotelRecord,
+  FlightRecord,
+  RestaurantRecord,
   TemplateRecord,
   ChatMessage,
   BookingOption,
@@ -105,6 +107,36 @@ class Store {
 
   clearHotelCache(bookingId: string): void {
     this.hotelCache.delete(bookingId);
+  }
+
+  // ----- Flight cache (per-booking) -----
+  private flightCache = new Map<string, FlightRecord[]>();
+
+  getFlightCache(bookingId: string): FlightRecord[] | undefined {
+    return this.flightCache.get(bookingId);
+  }
+
+  setFlightCache(bookingId: string, flights: FlightRecord[]): void {
+    this.flightCache.set(bookingId, flights);
+  }
+
+  clearFlightCache(bookingId: string): void {
+    this.flightCache.delete(bookingId);
+  }
+
+  // ----- Restaurant cache (per-booking) -----
+  private restaurantCache = new Map<string, RestaurantRecord[]>();
+
+  getRestaurantCache(bookingId: string): RestaurantRecord[] | undefined {
+    return this.restaurantCache.get(bookingId);
+  }
+
+  setRestaurantCache(bookingId: string, restaurants: RestaurantRecord[]): void {
+    this.restaurantCache.set(bookingId, restaurants);
+  }
+
+  clearRestaurantCache(bookingId: string): void {
+    this.restaurantCache.delete(bookingId);
   }
 
   // ----- Transactions -----

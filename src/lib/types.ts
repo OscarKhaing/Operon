@@ -1,5 +1,7 @@
 // ===== Core Data Models =====
 
+export type BookingCategory = "hotel" | "flight" | "restaurant";
+
 export type BookingStatus =
   | "intake"
   | "extracting"
@@ -36,11 +38,41 @@ export interface Preferences {
   specialRequests: string;
 }
 
+// ===== Flight-specific details =====
+
+export interface FlightDetails {
+  origin: string;
+  destination: string;
+  departureDate: string; // ISO date
+  returnDate: string;    // ISO date, empty for one-way
+  passengers: number;
+  cabinClass: string;    // Economy, Premium Economy, Business, First
+  maxBudget: number;
+}
+
+// ===== Restaurant-specific details =====
+
+export interface RestaurantDetails {
+  location: string;
+  date: string;     // ISO date
+  time: string;     // e.g. "19:00"
+  partySize: number;
+  cuisine: string;
+  priceRange: string; // e.g. "30-50"
+}
+
 export interface BookingRequest {
   id: string;
+  category?: BookingCategory;
+  categories?: BookingCategory[];       // multi-category: all categories to book
+  activeCategory?: BookingCategory;     // which category is currently being processed
+  completedCategories?: BookingCategory[]; // categories that have been confirmed
+  conciseMode?: boolean;                // when true, chatbot asks for all info at once
   customer: CustomerInfo;
   travel: TravelDetails;
   preferences: Preferences;
+  flightDetails?: FlightDetails;
+  restaurantDetails?: RestaurantDetails;
   status: BookingStatus;
   assignedTo: string; // operator name
   channel?: "web" | "instagram";
@@ -81,6 +113,34 @@ export interface HotelRecord {
   tags: string[]; // e.g. "beachfront", "business", "family"
 }
 
+// ===== Flight =====
+
+export interface FlightRecord {
+  id: string;
+  airline: string;       // providerName
+  flightNumber: string;
+  origin: string;        // e.g. "San Diego (SAN)"
+  destination: string;   // e.g. "Tokyo (NRT)"
+  departureDate: string; // ISO date
+  returnDate: string;    // ISO date
+  cabinClass: string;    // Economy, Premium Economy, Business, First
+  price: number;         // discountedPrice
+  basePrice: number;
+  inventory: number;
+}
+
+// ===== Restaurant =====
+
+export interface RestaurantRecord {
+  id: string;
+  name: string;          // providerName
+  location: string;
+  cuisine: string;
+  priceRange: string;    // "10-20", "20-30", "30-50", "50-100", "100+"
+  rating: number;        // 0-5
+  amenities: string[];
+}
+
 // ===== Template =====
 
 export interface TemplateField {
@@ -97,19 +157,49 @@ export interface TemplateRecord {
   fields: TemplateField[];
 }
 
-// ===== Booking Option =====
+// ===== Booking Option (discriminated union) =====
 
-export interface BookingOption {
+interface BaseBookingOption {
   id: string;
   bookingId: string;
-  hotelId: string;
-  hotelName: string;
-  roomType: RoomType;
+  category: BookingCategory;
   totalPrice: number;
-  nightCount: number;
   score: number; // 0-100 ranking score
   explanation: string;
 }
+
+export interface HotelBookingOption extends BaseBookingOption {
+  category: "hotel";
+  hotelId: string;
+  hotelName: string;
+  roomType: RoomType;
+  nightCount: number;
+}
+
+export interface FlightBookingOption extends BaseBookingOption {
+  category: "flight";
+  flightId: string;
+  airline: string;
+  flightNumber: string;
+  origin: string;
+  destination: string;
+  departureDate: string;
+  returnDate?: string;
+  cabinClass: string;
+}
+
+export interface RestaurantBookingOption extends BaseBookingOption {
+  category: "restaurant";
+  restaurantId: string;
+  restaurantName: string;
+  cuisine: string;
+  location: string;
+  priceRange: string;
+  rating: number;
+  amenities: string[];
+}
+
+export type BookingOption = HotelBookingOption | FlightBookingOption | RestaurantBookingOption;
 
 // ===== Booking Transaction =====
 
@@ -136,8 +226,11 @@ export type MessageRole = "customer" | "agent" | "system";
 // `metadata` holds structured data for web UI rendering (clickable cards, etc.).
 export type MessageMetadata =
   | { type: "hotel_options"; options: HotelOptionCard[] }
+  | { type: "flight_options"; options: FlightOptionCard[] }
+  | { type: "restaurant_options"; options: RestaurantOptionCard[] }
   | { type: "option_selected"; optionIndex: number; optionId: string }
   | { type: "hotel_response"; responseType: "confirmed" | "more_info_needed" | "no_availability"; message: string }
+  | { type: "provider_response"; responseType: "confirmed" | "more_info_needed" | "no_availability"; message: string }
   | null;
 
 export interface HotelOptionCard {
@@ -148,6 +241,32 @@ export interface HotelOptionCard {
   totalPrice: number;
   nights: number;
   stars: number;
+  amenities: string[];
+  score: number;
+  explanation: string;
+}
+
+export interface FlightOptionCard {
+  optionId: string;
+  airline: string;
+  flightNumber: string;
+  origin: string;
+  destination: string;
+  departureDate: string;
+  returnDate?: string;
+  cabinClass: string;
+  price: number;
+  score: number;
+  explanation: string;
+}
+
+export interface RestaurantOptionCard {
+  optionId: string;
+  restaurantName: string;
+  cuisine: string;
+  location: string;
+  priceRange: string;
+  rating: number;
   amenities: string[];
   score: number;
   explanation: string;
