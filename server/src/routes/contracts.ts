@@ -15,14 +15,32 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 });
 
 // READ: Get all deals (The Travel Agent's Catalog)
+// READ: Get filtered deals (Category, Location, and Date Range)
 router.get('/', async (req: Request, res: Response): Promise<void> => {
   try {
-    const { category, location } = req.query;
+    const { category, location, startDate, endDate } = req.query;
     
-    // Build a type-safe query object
     let query: any = {};
-    if (category) query.category = category;
-    if (location) query.location = { $regex: location, $options: 'i' };
+
+    // 1. Filter by Category (HOTEL/FLIGHT)
+    if (category) {
+      query.category = category;
+    }
+
+    // 2. Filter by Location (Case-insensitive regex)
+    if (location) {
+      query.location = { $regex: location, $options: 'i' };
+    }
+
+    // 3. Filter by Date Range
+    // We find contracts that are available throughout the requested period
+    if (startDate && endDate) {
+      query.startDate = { $lte: new Date(startDate as string) };
+      query.endDate = { $gte: new Date(endDate as string) };
+    }
+
+    // 4. Ensure inventory is actually available
+    query.inventory = { $gt: 0 };
 
     const contracts = await Contract.find(query).sort({ discountedPrice: 1 });
     res.json(contracts);
