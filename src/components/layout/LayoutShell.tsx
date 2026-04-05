@@ -10,7 +10,7 @@ import Sidebar from "./Sidebar";
  */
 export default function LayoutShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const isCustomerPage = pathname === "/book";
+  const isCustomerPage = pathname === "/book" || pathname === "/";
   const [collapsed, setCollapsed] = useState(false);
 
   if (isCustomerPage) {
