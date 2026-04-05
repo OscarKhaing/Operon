@@ -23,6 +23,7 @@ import { generateDummyPdf } from "./pdf-dummy";
 import { sendReservationEmail, sendCancellationEmail } from "./email";
 import { simulateHotelResponse } from "./hotel-response";
 import { fetchHotelById, fetchHotels, fetchAvailableLocations } from "./hotel-api";
+import { createCheckoutSession } from "./stripe";
 import { v4 as uuid } from "uuid";
 
 /**
@@ -292,7 +293,10 @@ function confirmSelection(
   chosen: BookingOption,
   displayNumber: number,
 ): WorkflowResult {
-  store.updateBooking(booking.id, { status: "selected" });
+  store.updateBooking(booking.id, {
+    status: "selected",
+    selectedOptionId: chosen.id,
+  });
 
   addMsg(
     booking.id,
@@ -351,14 +355,38 @@ async function handleCollectingInfo(
   const missing = PERSONAL_FIELDS.filter((f) => !collected[f]);
 
   if (missing.length === 0) {
-    // All personal info collected! → proceed to PDF + dispatch
-    store.updateBooking(booking.id, { status: "filling_template" });
-    addMsg(booking.id, "system", "All personal info collected. Generating reservation document...");
+    // All personal info collected! → create payment session
+    addMsg(booking.id, "system", "All personal info collected. Creating payment link...");
 
-    // Trigger PDF + dispatch
     const options = store.getOptions(booking.id);
-    const selectedOption = options[0]; // use first/selected
-    return triggerDispatch(booking.id, selectedOption);
+    const selectedOption = booking.selectedOptionId
+      ? options.find((option) => option.id === booking.selectedOptionId)
+      : options[0];
+    if (!selectedOption) {
+      return text("I couldn't find your selected option. Please choose an option again.");
+    }
+
+    const { url, sessionId } = await createCheckoutSession({
+      bookingId: booking.id,
+      totalPrice: selectedOption.totalPrice,
+      hotelName: selectedOption.hotelName,
+      roomType: selectedOption.roomType.name,
+      checkIn: booking.travel.checkIn,
+      checkOut: booking.travel.checkOut,
+      guestEmail: booking.customer.email || undefined,
+      currency: booking.preferences.currency || "USD",
+    });
+
+    store.updateBooking(booking.id, {
+      status: "awaiting_payment",
+      stripeSessionId: sessionId,
+      paymentStatus: "unpaid",
+    });
+    addMsg(booking.id, "system", `Stripe session created: ${sessionId}`);
+
+    return text(
+      `Almost there! To confirm your reservation at **${selectedOption.hotelName}**, please complete your payment of **$${selectedOption.totalPrice}** using this secure link:\n\n${url}\n\nOnce payment is complete, I'll send the reservation to the hotel immediately.`
+    );
   }
 
   // Still collecting — LLM generates natural follow-up
@@ -369,7 +397,7 @@ async function handleCollectingInfo(
 
 // ─── Dispatch: dummy PDF + real email via Resend ────────────────────────────
 
-async function triggerDispatch(bookingId: string, option: BookingOption): Promise<WorkflowResult> {
+export async function triggerDispatch(bookingId: string, option: BookingOption): Promise<WorkflowResult> {
   const booking = store.getBooking(bookingId)!;
   const hotel = await fetchHotelById(option.hotelId);
   const hotelEmail = hotel?.contactEmail || "hotel@example.com";
@@ -487,7 +515,7 @@ async function handleSentToHotel(
 
 const CANCELABLE_STATES: string[] = [
   "intake", "extracting", "matching", "options_presented",
-  "selected", "collecting_info", "filling_template", "sent_to_hotel",
+  "selected", "collecting_info", "awaiting_payment", "filling_template", "sent_to_hotel",
 ];
 
 const YES_PATTERN = /\b(yes|yeah|yep|sure|confirm|go\s*ahead|do\s*it|cancel\s*it|proceed)\b/i;
@@ -648,6 +676,9 @@ export async function processMessage(
     case "selected":
     case "collecting_info":
       return handleCollectingInfo(booking, customerMessage);
+
+    case "awaiting_payment":
+      return text("I'm waiting for your payment confirmation from Stripe. Once you complete the payment at the link I sent, I'll proceed with your reservation.");
 
     case "sent_to_hotel":
       return handleSentToHotel(booking, customerMessage);

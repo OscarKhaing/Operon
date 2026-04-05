@@ -31,6 +31,7 @@ export function statusLabel(status: BookingStatus): string {
     options_presented: "Options Sent",
     selected: "Option Selected",
     collecting_info: "Collecting Info",
+    awaiting_payment: "Awaiting Payment",
     filling_template: "Filling Contract",
     sent_to_hotel: "Sent to Hotel",
     confirmed: "Confirmed",

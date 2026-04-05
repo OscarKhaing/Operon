@@ -7,6 +7,7 @@ export type BookingStatus =
   | "options_presented"
   | "selected"
   | "collecting_info"
+  | "awaiting_payment"
   | "filling_template"
   | "sent_to_hotel"
   | "confirmed"
@@ -44,6 +45,9 @@ export interface BookingRequest {
   assignedTo: string; // operator name
   channel?: "web" | "instagram";
   instagramSenderId?: string;
+  selectedOptionId?: string;
+  stripeSessionId?: string;
+  paymentStatus?: "unpaid" | "paid";
   pdfUrl?: string; // URL to generated reservation PDF
   rejectedOptionIds?: string[]; // options rejected by hotels (no availability)
   cancelRequested?: boolean; // true when customer expressed cancel intent, awaiting confirmation

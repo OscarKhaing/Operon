@@ -223,11 +223,10 @@ function buildOptionElements(options: HotelOptionCard[]): InstagramTemplateEleme
     return {
       title,
       subtitle,
-      image_url: imageUrl,
       buttons: [
         {
           type: "postback",
-          title: `Select option ${optionIndex}`,
+          title: `Select`,
           payload: `option:${optionIndex}:${opt.optionId}`,
         },
       ],
