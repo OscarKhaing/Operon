@@ -8,7 +8,8 @@ import {
   CalendarCheck,
   Building2,
   Plane,
-  Users, // Import the User logo icon
+  Users,
+  UtensilsCrossed,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -18,6 +19,8 @@ const NAV_ITEMS = [
   { href: "/users", label: "Clients", icon: Users }, // Added Users tab
   { href: "/bookings", label: "Bookings", icon: CalendarCheck },
   { href: "/hotels", label: "Hotels", icon: Building2 },
+  { href: "/flights", label: "Flights", icon: Plane },
+  { href: "/restaurants", label: "Restaurants", icon: UtensilsCrossed },
 ];
 
 export default function Sidebar() {

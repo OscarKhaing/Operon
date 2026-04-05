@@ -428,16 +428,21 @@ export default function BookingDetailPage() {
                     </div>
                     <div className="flex-1">
                       <div className="flex items-center gap-2">
-                        <h4 className="font-semibold text-gray-900">{opt.hotelName}</h4>
-                        <span className="text-sm text-gray-500">— {opt.roomType.name}</span>
+                        <h4 className="font-semibold text-gray-900">
+                          {opt.category === "hotel" ? opt.hotelName : opt.category === "flight" ? `${opt.airline} ${opt.flightNumber}` : opt.restaurantName}
+                        </h4>
+                        <span className="text-sm text-gray-500">
+                          — {opt.category === "hotel" ? opt.roomType.name : opt.category === "flight" ? `${opt.origin} → ${opt.destination}` : opt.cuisine}
+                        </span>
                         {isRejected && (
                           <span className="px-2 py-0.5 bg-red-100 text-red-600 rounded-full text-xs font-medium">Rejected</span>
                         )}
                       </div>
                       <p className="text-sm text-gray-600 mt-1">{opt.explanation}</p>
                       <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
-                        <span>${opt.roomType.basePrice}/night</span>
-                        <span>{opt.nightCount} nights</span>
+                        {opt.category === "hotel" && <><span>${opt.roomType.basePrice}/night</span><span>{opt.nightCount} nights</span></>}
+                        {opt.category === "flight" && <span>{opt.cabinClass}</span>}
+                        {opt.category === "restaurant" && <><span>{opt.priceRange}/person</span><span>{opt.rating} stars</span></>}
                         <span className="font-semibold text-gray-900">${opt.totalPrice} total</span>
                         <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded-full font-medium">
                           Score: {opt.score}

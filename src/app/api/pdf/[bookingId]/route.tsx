@@ -28,6 +28,13 @@ export async function GET(
     });
   }
 
+  if (option.category !== "hotel") {
+    return new Response(JSON.stringify({ error: "PDF generation only supported for hotel bookings" }), {
+      status: 400,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
   const hotel = await fetchHotelById(option.hotelId);
 
   const pdfInput: PdfInput = {

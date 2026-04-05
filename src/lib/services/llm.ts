@@ -285,10 +285,23 @@ Rules:
 - Never make up or assume information the customer hasn't provided.
 - Never confirm a booking or present options — just collect info.`;
 
+const PREFERENCE_CHAT_CONCISE_SYSTEM = `You are a friendly travel booking assistant for a travel agency.
+Your job is to help customers find a hotel by collecting ALL their booking preferences in as few messages as possible.
+
+REQUIRED info (must collect): destination, check-in date, check-out date.
+OPTIONAL info (nice to have): number of guests, room type (Standard/Deluxe/Suite), budget per night.
+
+Rules:
+- Be warm and professional. Ask for ALL missing info in a single message using a numbered list.
+- If multiple fields are missing, list them all at once.
+- Never make up or assume information the customer hasn't provided.
+- Never confirm a booking or present options — just collect info.`;
+
 export async function generatePreferenceReply(
   conversationHistory: string,
   knownFields: Record<string, string | number | null>,
-  missingFields: string[]
+  missingFields: string[],
+  concise = false,
 ): Promise<string> {
   const known = Object.entries(knownFields)
     .filter(([, v]) => v !== null)
@@ -301,9 +314,9 @@ ${conversationHistory}
 Info collected so far: ${known || "none yet"}
 Still missing: ${missingFields.join(", ")}
 
-Write a short, friendly reply to the customer. Ask about the missing info naturally.`;
+${concise ? "Ask for ALL missing info in a single numbered list." : "Write a short, friendly reply to the customer. Ask about the missing info naturally."}`;
 
-  return generateText(prompt, PREFERENCE_CHAT_SYSTEM, 0.6);
+  return generateText(prompt, concise ? PREFERENCE_CHAT_CONCISE_SYSTEM : PREFERENCE_CHAT_SYSTEM, 0.6);
 }
 
 // ─── PROMPT 3: Present hotel options naturally ──────────────────────────────
@@ -497,6 +510,410 @@ ${missingFields.length === 0
     : "Write a short, friendly reply asking for the missing info."}`;
 
   return generateText(prompt, CHECKLIST_CHAT_SYSTEM, 0.5);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CATEGORY DETECTION
+// ═══════════════════════════════════════════════════════════════════════════
+
+const CATEGORY_SYSTEM = `You are a booking assistant classifier. Determine what type(s) of booking the customer wants from their message.
+
+Rules:
+- Output ONLY a valid JSON object with key "categories" (an array of strings).
+- Include ALL categories the customer mentions or implies. They may want multiple bookings.
+- Valid values: "hotel", "flight", "restaurant"
+- "hotel" — if they mention hotel, accommodation, room, stay, lodge, resort, inn, motel, hostel
+- "flight" — if they mention flight, fly, airplane, airline, ticket, plane, airport, travel to (with transport implied)
+- "restaurant" — if they mention restaurant, dinner, lunch, breakfast, brunch, table, dining, eat, food, reservation for eating
+- If they say "all", "everything", "all three", "the works" → include all three: ["hotel", "flight", "restaurant"]
+- If they say "hotel and flight", "stay and fly" → include both mentioned
+- Return empty array [] ONLY if you truly cannot determine any category
+
+Examples:
+- "I need a hotel" → {"categories":["hotel"]}
+- "book me a flight and hotel" → {"categories":["flight","hotel"]}
+- "all" or "everything" → {"categories":["hotel","flight","restaurant"]}
+- "I want to fly to Tokyo and find a place to eat" → {"categories":["flight","restaurant"]}`;
+
+interface CategoryDetection {
+  categories: ("hotel" | "flight" | "restaurant")[];
+}
+
+const CATEGORY_OLLAMA_SCHEMA: OllamaSchema = {
+  type: "object",
+  properties: {
+    categories: { type: "string" },
+  },
+  required: ["categories"],
+};
+
+const CATEGORY_GEMINI_SCHEMA: Schema = {
+  type: SchemaType.OBJECT,
+  properties: {
+    categories: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING, format: "enum", enum: ["hotel", "flight", "restaurant"] }, description: "Array of booking categories" },
+  },
+  required: ["categories"],
+};
+
+export async function detectCategory(message: string): Promise<CategoryDetection> {
+  const prompt = `What type(s) of booking does this customer want? They may want multiple.
+"${message}"
+
+Output JSON with key: categories (array of: hotel, flight, restaurant)`;
+
+  const result = await generateJSON<CategoryDetection>(
+    prompt,
+    CATEGORY_SYSTEM,
+    CATEGORY_OLLAMA_SCHEMA,
+    CATEGORY_GEMINI_SCHEMA,
+    0.1,
+  );
+
+  // Normalize: ensure we always return an array
+  if (result && Array.isArray(result.categories) && result.categories.length > 0) {
+    return result;
+  }
+
+  return { categories: [] };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FLIGHT PROMPTS
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ─── FLIGHT PROMPT 1: Extract flight preferences ─────────────────────────────
+
+interface FlightPreferencesExtraction {
+  origin: string | null;
+  destination: string | null;
+  departureDate: string | null;
+  returnDate: string | null;
+  passengers: number | null;
+  cabinClass: string | null;
+  maxBudget: number | null;
+}
+
+const FLIGHT_PREFERENCES_SYSTEM = `You are a data extraction assistant for a travel booking agency.
+Your ONLY job is to extract flight booking preferences that the CUSTOMER EXPLICITLY STATED in the conversation.
+
+CRITICAL RULES:
+- Output ONLY a valid JSON object. No explanation, no text before or after.
+- You MUST use null for ANY field the customer has NOT explicitly mentioned.
+- NEVER invent, guess, or assume values.
+- Look at the ENTIRE conversation to combine info from multiple messages.
+
+Field-specific rules:
+- origin: The departure city/airport. Match to AVAILABLE_ORIGINS if provided. Use null if not mentioned.
+- destination: The arrival city/airport. Match to AVAILABLE_DESTINATIONS if provided. Use null if not mentioned.
+- departureDate: YYYY-MM-DD format. Year defaults to 2026 if not stated. Use null if no departure date mentioned.
+- returnDate: YYYY-MM-DD format. Year defaults to 2026. Use null if not mentioned or one-way trip.
+- passengers: Integer. "2 tickets", "for 2", "myself"=1. Use null if never mentioned.
+- cabinClass: One of: Economy, Premium Economy, Business, First. Use null if no preference stated.
+- maxBudget: Total budget per person as integer. "$800"=800, "under 1000"=1000. Use null if no number mentioned.`;
+
+const FLIGHT_PREFS_OLLAMA_SCHEMA: OllamaSchema = {
+  type: "object",
+  properties: {
+    origin: { type: ["string", "null"] },
+    destination: { type: ["string", "null"] },
+    departureDate: { type: ["string", "null"] },
+    returnDate: { type: ["string", "null"] },
+    passengers: { type: ["integer", "null"] },
+    cabinClass: { type: ["string", "null"], enum: ["Economy", "Premium Economy", "Business", "First"] },
+    maxBudget: { type: ["integer", "null"] },
+  },
+  required: ["origin", "destination", "departureDate", "returnDate", "passengers", "cabinClass", "maxBudget"],
+};
+
+const FLIGHT_PREFS_GEMINI_SCHEMA: Schema = {
+  type: SchemaType.OBJECT,
+  properties: {
+    origin: { type: SchemaType.STRING, nullable: true, description: "Departure city/airport or null" },
+    destination: { type: SchemaType.STRING, nullable: true, description: "Arrival city/airport or null" },
+    departureDate: { type: SchemaType.STRING, nullable: true, description: "Departure date YYYY-MM-DD or null" },
+    returnDate: { type: SchemaType.STRING, nullable: true, description: "Return date YYYY-MM-DD or null" },
+    passengers: { type: SchemaType.INTEGER, nullable: true, description: "Number of passengers or null" },
+    cabinClass: { type: SchemaType.STRING, nullable: true, format: "enum", enum: ["Economy", "Premium Economy", "Business", "First"], description: "Cabin class or null" },
+    maxBudget: { type: SchemaType.INTEGER, nullable: true, description: "Max budget per person as integer or null" },
+  },
+  required: ["origin", "destination", "departureDate", "returnDate", "passengers", "cabinClass", "maxBudget"],
+};
+
+export async function extractFlightPreferences(
+  conversationText: string,
+  availableRoutes: { origins: string[]; destinations: string[] } = { origins: [], destinations: [] },
+): Promise<FlightPreferencesExtraction> {
+  const routeSection = (availableRoutes.origins.length > 0 || availableRoutes.destinations.length > 0)
+    ? `\nAVAILABLE_ORIGINS (match customer's input to the closest one):\n${availableRoutes.origins.map((o) => `- ${o}`).join("\n")}\n\nAVAILABLE_DESTINATIONS:\n${availableRoutes.destinations.map((d) => `- ${d}`).join("\n")}\n`
+    : "";
+
+  const prompt = `Extract ONLY what the customer explicitly stated from this conversation. Use null for anything not mentioned.
+${routeSection}
+"""
+${conversationText}
+"""
+
+JSON with keys: origin, destination, departureDate, returnDate, passengers, cabinClass, maxBudget`;
+
+  const result = await generateJSON<FlightPreferencesExtraction>(
+    prompt,
+    FLIGHT_PREFERENCES_SYSTEM,
+    FLIGHT_PREFS_OLLAMA_SCHEMA,
+    FLIGHT_PREFS_GEMINI_SCHEMA,
+    0.1,
+  );
+
+  return result || { origin: null, destination: null, departureDate: null, returnDate: null, passengers: null, cabinClass: null, maxBudget: null };
+}
+
+// ─── FLIGHT PROMPT 2: Generate conversational reply during preference collection ──
+
+const FLIGHT_PREF_CHAT_SYSTEM = `You are a friendly travel booking assistant for a travel agency.
+Your job is to help customers find a flight by collecting their booking preferences one step at a time.
+
+REQUIRED info (must collect): departure city/airport, destination city/airport, departure date.
+OPTIONAL info (nice to have): return date, number of passengers, cabin class (Economy/Premium Economy/Business/First), budget.
+
+Rules:
+- Be warm, brief, and professional. 1-3 sentences max.
+- Focus on getting the REQUIRED fields first.
+- Once you have origin, destination, and departure date, you may ask about optional preferences OR proceed to search.
+- If the customer says "any" or "no preference" for cabin class or budget, accept that.
+- Never make up or assume information the customer hasn't provided.
+- Never confirm a booking or present options — just collect info.`;
+
+export async function generateFlightPreferenceReply(
+  conversationHistory: string,
+  knownFields: Record<string, string | number | null>,
+  missingFields: string[],
+  concise = false,
+): Promise<string> {
+  const known = Object.entries(knownFields)
+    .filter(([, v]) => v !== null)
+    .map(([k, v]) => `${k}: ${v}`)
+    .join(", ");
+
+  const prompt = `Conversation so far:
+${conversationHistory}
+
+Info collected so far: ${known || "none yet"}
+Still missing: ${missingFields.join(", ")}
+
+${concise ? "Ask for ALL missing info in a single numbered list." : "Write a short, friendly reply to the customer. Ask about the missing info naturally."}`;
+
+  return generateText(prompt, FLIGHT_PREF_CHAT_SYSTEM, 0.6);
+}
+
+// ─── FLIGHT PROMPT 3: Present flight options naturally ────────────────────────
+
+const PRESENT_FLIGHTS_SYSTEM = `You are a friendly travel booking assistant presenting flight options to a customer.
+
+Rules:
+- Present options clearly with numbering.
+- Highlight airline, route, cabin class, and price.
+- Mention departure date.
+- End by asking which they prefer, or if they'd like different options.
+- Keep it concise — no more than 2 lines per option.`;
+
+interface FlightOptionForLLM {
+  number: number;
+  airline: string;
+  flightNumber: string;
+  origin: string;
+  destination: string;
+  departureDate: string;
+  cabinClass: string;
+  price: number;
+  score: number;
+}
+
+export async function presentFlightOptions(
+  customerName: string,
+  route: string,
+  options: FlightOptionForLLM[]
+): Promise<string> {
+  const optionsText = options
+    .map(
+      (o) =>
+        `Option ${o.number}: ${o.airline} ${o.flightNumber} | ${o.origin} → ${o.destination} | ${o.cabinClass} | $${o.price}/person | Departs: ${o.departureDate}`
+    )
+    .join("\n");
+
+  const prompt = `Customer "${customerName}" is looking for flights on the ${route} route.
+
+Here are the matching flight options:
+${optionsText}
+
+Present these options to the customer in a friendly, helpful way. Number each option clearly.`;
+
+  return generateText(prompt, PRESENT_FLIGHTS_SYSTEM, 0.5);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// RESTAURANT PROMPTS
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ─── RESTAURANT PROMPT 1: Extract restaurant preferences ─────────────────────
+
+interface RestaurantPreferencesExtraction {
+  location: string | null;
+  date: string | null;
+  time: string | null;
+  partySize: number | null;
+  cuisine: string | null;
+  priceRange: string | null;
+}
+
+const RESTAURANT_PREFERENCES_SYSTEM = `You are a data extraction assistant for a restaurant booking agency.
+Your ONLY job is to extract restaurant booking preferences that the CUSTOMER EXPLICITLY STATED in the conversation.
+
+CRITICAL RULES:
+- Output ONLY a valid JSON object. No explanation, no text before or after.
+- You MUST use null for ANY field the customer has NOT explicitly mentioned.
+- NEVER invent, guess, or assume values.
+- Look at the ENTIRE conversation to combine info from multiple messages.
+
+Field-specific rules:
+- location: The city or area. Match to AVAILABLE_LOCATIONS if provided. Use null if not mentioned.
+- date: YYYY-MM-DD format. Year defaults to 2026 if not stated. "tonight" = today's date, "tomorrow" = tomorrow. Use null if not mentioned.
+- time: 24-hour format "HH:MM". "7pm"="19:00", "noon"="12:00", "dinner"=null (too vague). Use null if not mentioned.
+- partySize: Integer. "table for 4"=4, "two of us"=2, "myself"=1. Use null if never mentioned.
+- cuisine: The type of food. "Italian", "sushi", "Mexican", etc. Use null if no preference stated.
+- priceRange: One of: "10-20", "20-30", "30-50", "50-100", "100+". Map from customer input: "cheap"="10-20", "moderate"="30-50", "upscale"="50-100", "fine dining"="100+". Use null if not mentioned.`;
+
+const RESTAURANT_PREFS_OLLAMA_SCHEMA: OllamaSchema = {
+  type: "object",
+  properties: {
+    location: { type: ["string", "null"] },
+    date: { type: ["string", "null"] },
+    time: { type: ["string", "null"] },
+    partySize: { type: ["integer", "null"] },
+    cuisine: { type: ["string", "null"] },
+    priceRange: { type: ["string", "null"], enum: ["10-20", "20-30", "30-50", "50-100", "100+"] },
+  },
+  required: ["location", "date", "time", "partySize", "cuisine", "priceRange"],
+};
+
+const RESTAURANT_PREFS_GEMINI_SCHEMA: Schema = {
+  type: SchemaType.OBJECT,
+  properties: {
+    location: { type: SchemaType.STRING, nullable: true, description: "City or area or null" },
+    date: { type: SchemaType.STRING, nullable: true, description: "Date YYYY-MM-DD or null" },
+    time: { type: SchemaType.STRING, nullable: true, description: "Time HH:MM or null" },
+    partySize: { type: SchemaType.INTEGER, nullable: true, description: "Number of guests or null" },
+    cuisine: { type: SchemaType.STRING, nullable: true, description: "Cuisine type or null" },
+    priceRange: { type: SchemaType.STRING, nullable: true, format: "enum", enum: ["10-20", "20-30", "30-50", "50-100", "100+"], description: "Price range per person or null" },
+  },
+  required: ["location", "date", "time", "partySize", "cuisine", "priceRange"],
+};
+
+export async function extractRestaurantPreferences(
+  conversationText: string,
+  availableLocations: string[] = [],
+): Promise<RestaurantPreferencesExtraction> {
+  const locationSection = availableLocations.length > 0
+    ? `\nAVAILABLE_LOCATIONS (match customer's input to the closest one):\n${availableLocations.map((l) => `- ${l}`).join("\n")}\n`
+    : "";
+
+  const prompt = `Extract ONLY what the customer explicitly stated from this conversation. Use null for anything not mentioned.
+${locationSection}
+"""
+${conversationText}
+"""
+
+JSON with keys: location, date, time, partySize, cuisine, priceRange`;
+
+  const result = await generateJSON<RestaurantPreferencesExtraction>(
+    prompt,
+    RESTAURANT_PREFERENCES_SYSTEM,
+    RESTAURANT_PREFS_OLLAMA_SCHEMA,
+    RESTAURANT_PREFS_GEMINI_SCHEMA,
+    0.1,
+  );
+
+  return result || { location: null, date: null, time: null, partySize: null, cuisine: null, priceRange: null };
+}
+
+// ─── RESTAURANT PROMPT 2: Generate conversational reply during preference collection ──
+
+const RESTAURANT_PREF_CHAT_SYSTEM = `You are a friendly restaurant booking assistant.
+Your job is to help customers find a restaurant by collecting their preferences one step at a time.
+
+REQUIRED info (must collect): location/city, date, time.
+OPTIONAL info (nice to have): party size, cuisine preference, price range.
+
+Rules:
+- Be warm, brief, and professional. 1-3 sentences max.
+- Focus on getting the REQUIRED fields first (location, then date and time).
+- Once you have location, date, and time, you may ask about optional preferences OR proceed to search.
+- If the customer says "any" or "no preference" for cuisine or price, accept that.
+- Never make up or assume information the customer hasn't provided.
+- Never confirm a booking or present options — just collect info.`;
+
+export async function generateRestaurantPreferenceReply(
+  conversationHistory: string,
+  knownFields: Record<string, string | number | null>,
+  missingFields: string[],
+  concise = false,
+): Promise<string> {
+  const known = Object.entries(knownFields)
+    .filter(([, v]) => v !== null)
+    .map(([k, v]) => `${k}: ${v}`)
+    .join(", ");
+
+  const prompt = `Conversation so far:
+${conversationHistory}
+
+Info collected so far: ${known || "none yet"}
+Still missing: ${missingFields.join(", ")}
+
+${concise ? "Ask for ALL missing info in a single numbered list." : "Write a short, friendly reply to the customer. Ask about the missing info naturally."}`;
+
+  return generateText(prompt, RESTAURANT_PREF_CHAT_SYSTEM, 0.6);
+}
+
+// ─── RESTAURANT PROMPT 3: Present restaurant options naturally ────────────────
+
+const PRESENT_RESTAURANTS_SYSTEM = `You are a friendly restaurant booking assistant presenting dining options to a customer.
+
+Rules:
+- Present options clearly with numbering.
+- Highlight restaurant name, cuisine, location, price range, and rating.
+- Mention key amenities briefly.
+- End by asking which they prefer, or if they'd like different options.
+- Keep it concise — no more than 2 lines per option.`;
+
+interface RestaurantOptionForLLM {
+  number: number;
+  restaurantName: string;
+  cuisine: string;
+  location: string;
+  priceRange: string;
+  rating: number;
+  amenities: string[];
+  score: number;
+}
+
+export async function presentRestaurantOptions(
+  customerName: string,
+  location: string,
+  options: RestaurantOptionForLLM[]
+): Promise<string> {
+  const optionsText = options
+    .map(
+      (o) =>
+        `Option ${o.number}: ${o.restaurantName} | ${o.cuisine} | ${o.location} | $${o.priceRange}/person | ${o.rating} stars | ${o.amenities.slice(0, 3).join(", ")}`
+    )
+    .join("\n");
+
+  const prompt = `Customer "${customerName}" is looking for a restaurant in ${location}.
+
+Here are the matching restaurant options:
+${optionsText}
+
+Present these options to the customer in a friendly, helpful way. Number each option clearly.`;
+
+  return generateText(prompt, PRESENT_RESTAURANTS_SYSTEM, 0.5);
 }
 
 // ─── Cancel intent detection (regex-only, no LLM call) ─────────────────────

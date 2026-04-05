@@ -2,7 +2,7 @@
  * Hotel matching and ranking engine.
  * Fetches hotels from MongoDB via the hotel API, then scores and ranks options.
  */
-import { BookingRequest, HotelRecord, BookingOption, RoomType } from "../types";
+import { BookingRequest, HotelRecord, HotelBookingOption, RoomType } from "../types";
 import { fetchHotels } from "./hotel-api";
 import { v4 as uuid } from "uuid";
 
@@ -78,7 +78,7 @@ function scoreOption(
 }
 
 export interface MatchResult {
-  options: BookingOption[];
+  options: HotelBookingOption[];
   hotelMap: Map<string, HotelRecord>;
 }
 
@@ -123,7 +123,7 @@ export async function findOptions(
     hotelMap.set(hotel.name, hotel);
   }
 
-  const options: BookingOption[] = [];
+  const options: HotelBookingOption[] = [];
 
   for (const hotel of hotels) {
     for (const room of hotel.roomTypes) {
@@ -133,6 +133,7 @@ export async function findOptions(
         options.push({
           id: uuid(),
           bookingId: booking.id,
+          category: "hotel",
           hotelId: hotel.id,
           hotelName: hotel.name,
           roomType: room,

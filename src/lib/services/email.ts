@@ -216,7 +216,145 @@ export async function sendCancellationEmail(input: CancellationEmailInput): Prom
   }
 }
 
-// ─── Reservation email ──────────────────────────────────────────────────────
+// ─── Flight reservation email ──────────────────────────────────────────────
+
+export interface FlightReservationEmailInput {
+  airlineEmail: string;
+  airlineName: string;
+  guestName: string;
+  passport: string;
+  nationality: string;
+  guestEmail: string;
+  guestPhone: string;
+  flightNumber: string;
+  origin: string;
+  destination: string;
+  departureDate: string;
+  returnDate: string;
+  cabinClass: string;
+  passengers: number;
+  totalPrice: number;
+  currency: string;
+}
+
+function buildFlightReservationHtml(input: FlightReservationEmailInput): string {
+  return `
+<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; color: #1a1a2e;">
+  <div style="background: #1e3a5f; color: white; padding: 24px 32px; border-radius: 12px 12px 0 0;">
+    <h1 style="margin: 0; font-size: 20px; font-weight: 600;">Flight Booking Request</h1>
+    <p style="margin: 4px 0 0; opacity: 0.7; font-size: 14px;">Operon Booking System</p>
+  </div>
+  <div style="background: white; border: 1px solid #e5e7eb; border-top: none; padding: 32px; border-radius: 0 0 12px 12px;">
+    <p style="margin: 0 0 24px; font-size: 15px;">Dear <strong>${input.airlineName}</strong> Reservations,</p>
+    <p style="margin: 0 0 24px; font-size: 15px;">We would like to book the following flight:</p>
+    <table style="width: 100%; border-collapse: collapse; font-size: 14px; margin-bottom: 24px;">
+      <tr style="border-bottom: 1px solid #f3f4f6;"><td style="padding: 10px 0; color: #6b7280; width: 160px;">Passenger Name</td><td style="padding: 10px 0; font-weight: 600;">${input.guestName}</td></tr>
+      <tr style="border-bottom: 1px solid #f3f4f6;"><td style="padding: 10px 0; color: #6b7280;">Passport</td><td style="padding: 10px 0; font-weight: 600;">${input.passport}</td></tr>
+      <tr style="border-bottom: 1px solid #f3f4f6;"><td style="padding: 10px 0; color: #6b7280;">Nationality</td><td style="padding: 10px 0; font-weight: 600;">${input.nationality}</td></tr>
+      <tr style="border-bottom: 1px solid #f3f4f6;"><td style="padding: 10px 0; color: #6b7280;">Email</td><td style="padding: 10px 0;">${input.guestEmail}</td></tr>
+      <tr style="border-bottom: 1px solid #f3f4f6;"><td style="padding: 10px 0; color: #6b7280;">Phone</td><td style="padding: 10px 0;">${input.guestPhone}</td></tr>
+      <tr style="border-bottom: 1px solid #f3f4f6;"><td style="padding: 10px 0; color: #6b7280;">Flight</td><td style="padding: 10px 0; font-weight: 600;">${input.flightNumber}</td></tr>
+      <tr style="border-bottom: 1px solid #f3f4f6;"><td style="padding: 10px 0; color: #6b7280;">Route</td><td style="padding: 10px 0; font-weight: 600;">${input.origin} → ${input.destination}</td></tr>
+      <tr style="border-bottom: 1px solid #f3f4f6;"><td style="padding: 10px 0; color: #6b7280;">Departure</td><td style="padding: 10px 0; font-weight: 600;">${input.departureDate}</td></tr>
+      ${input.returnDate ? `<tr style="border-bottom: 1px solid #f3f4f6;"><td style="padding: 10px 0; color: #6b7280;">Return</td><td style="padding: 10px 0; font-weight: 600;">${input.returnDate}</td></tr>` : ""}
+      <tr style="border-bottom: 1px solid #f3f4f6;"><td style="padding: 10px 0; color: #6b7280;">Cabin Class</td><td style="padding: 10px 0; font-weight: 600;">${input.cabinClass}</td></tr>
+      <tr style="border-bottom: 1px solid #f3f4f6;"><td style="padding: 10px 0; color: #6b7280;">Passengers</td><td style="padding: 10px 0; font-weight: 600;">${input.passengers}</td></tr>
+      <tr><td style="padding: 10px 0; color: #6b7280;">Total Price</td><td style="padding: 10px 0; font-weight: 700; color: #0369a1; font-size: 16px;">$${input.totalPrice} ${input.currency}</td></tr>
+    </table>
+    <p style="margin: 0 0 8px; font-size: 15px;">Please confirm this booking at your earliest convenience.</p>
+    <p style="margin: 0; font-size: 14px; color: #6b7280;">Thank you,<br/>Operon Booking Operations</p>
+  </div>
+</div>`.trim();
+}
+
+export async function sendFlightReservationEmail(input: FlightReservationEmailInput): Promise<EmailResult> {
+  const timestamp = new Date().toISOString();
+  const subject = `Flight Booking — ${input.guestName} — ${input.flightNumber} ${input.origin} → ${input.destination}`;
+  try {
+    const recipient = TEST_RECIPIENT || input.airlineEmail;
+    const { data, error } = await resend.emails.send({
+      from: FROM,
+      to: recipient,
+      subject: TEST_RECIPIENT ? `[TEST → ${input.airlineEmail}] ${subject}` : subject,
+      html: buildFlightReservationHtml(input),
+    });
+    if (error) {
+      console.error("Resend flight email error:", error);
+      return { success: false, emailId: null, sentTo: input.airlineEmail, error: error.message, timestamp };
+    }
+    console.log(`Flight email sent via Resend: ${data?.id} → ${recipient}`);
+    return { success: true, emailId: data?.id ?? null, sentTo: input.airlineEmail, error: null, timestamp };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { success: false, emailId: null, sentTo: input.airlineEmail, error: message, timestamp };
+  }
+}
+
+// ─── Restaurant reservation email ─────────────────────────────────────────
+
+export interface RestaurantReservationEmailInput {
+  restaurantEmail: string;
+  restaurantName: string;
+  guestName: string;
+  guestEmail: string;
+  guestPhone: string;
+  date: string;
+  time: string;
+  partySize: number;
+  cuisine: string;
+  specialRequests?: string;
+}
+
+function buildRestaurantReservationHtml(input: RestaurantReservationEmailInput): string {
+  return `
+<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; color: #1a1a2e;">
+  <div style="background: #4a1942; color: white; padding: 24px 32px; border-radius: 12px 12px 0 0;">
+    <h1 style="margin: 0; font-size: 20px; font-weight: 600;">Table Reservation Request</h1>
+    <p style="margin: 4px 0 0; opacity: 0.7; font-size: 14px;">Operon Booking System</p>
+  </div>
+  <div style="background: white; border: 1px solid #e5e7eb; border-top: none; padding: 32px; border-radius: 0 0 12px 12px;">
+    <p style="margin: 0 0 24px; font-size: 15px;">Dear <strong>${input.restaurantName}</strong>,</p>
+    <p style="margin: 0 0 24px; font-size: 15px;">We would like to request a table reservation:</p>
+    <table style="width: 100%; border-collapse: collapse; font-size: 14px; margin-bottom: 24px;">
+      <tr style="border-bottom: 1px solid #f3f4f6;"><td style="padding: 10px 0; color: #6b7280; width: 160px;">Guest Name</td><td style="padding: 10px 0; font-weight: 600;">${input.guestName}</td></tr>
+      <tr style="border-bottom: 1px solid #f3f4f6;"><td style="padding: 10px 0; color: #6b7280;">Email</td><td style="padding: 10px 0;">${input.guestEmail}</td></tr>
+      <tr style="border-bottom: 1px solid #f3f4f6;"><td style="padding: 10px 0; color: #6b7280;">Phone</td><td style="padding: 10px 0;">${input.guestPhone}</td></tr>
+      <tr style="border-bottom: 1px solid #f3f4f6;"><td style="padding: 10px 0; color: #6b7280;">Date</td><td style="padding: 10px 0; font-weight: 600;">${input.date}</td></tr>
+      <tr style="border-bottom: 1px solid #f3f4f6;"><td style="padding: 10px 0; color: #6b7280;">Time</td><td style="padding: 10px 0; font-weight: 600;">${input.time}</td></tr>
+      <tr style="border-bottom: 1px solid #f3f4f6;"><td style="padding: 10px 0; color: #6b7280;">Party Size</td><td style="padding: 10px 0; font-weight: 600;">${input.partySize} guests</td></tr>
+      <tr style="border-bottom: 1px solid #f3f4f6;"><td style="padding: 10px 0; color: #6b7280;">Cuisine</td><td style="padding: 10px 0; font-weight: 600;">${input.cuisine}</td></tr>
+      ${input.specialRequests ? `<tr><td style="padding: 10px 0; color: #6b7280;">Special Requests</td><td style="padding: 10px 0;">${input.specialRequests}</td></tr>` : ""}
+    </table>
+    <p style="margin: 0 0 8px; font-size: 15px;">Please confirm this reservation at your earliest convenience.</p>
+    <p style="margin: 0; font-size: 14px; color: #6b7280;">Thank you,<br/>Operon Booking Operations</p>
+  </div>
+</div>`.trim();
+}
+
+export async function sendRestaurantReservationEmail(input: RestaurantReservationEmailInput): Promise<EmailResult> {
+  const timestamp = new Date().toISOString();
+  const subject = `Table Reservation — ${input.guestName} — ${input.date} at ${input.time}`;
+  try {
+    const recipient = TEST_RECIPIENT || input.restaurantEmail;
+    const { data, error } = await resend.emails.send({
+      from: FROM,
+      to: recipient,
+      subject: TEST_RECIPIENT ? `[TEST → ${input.restaurantEmail}] ${subject}` : subject,
+      html: buildRestaurantReservationHtml(input),
+    });
+    if (error) {
+      console.error("Resend restaurant email error:", error);
+      return { success: false, emailId: null, sentTo: input.restaurantEmail, error: error.message, timestamp };
+    }
+    console.log(`Restaurant email sent via Resend: ${data?.id} → ${recipient}`);
+    return { success: true, emailId: data?.id ?? null, sentTo: input.restaurantEmail, error: null, timestamp };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { success: false, emailId: null, sentTo: input.restaurantEmail, error: message, timestamp };
+  }
+}
+
+// ─── Hotel reservation email ──────────────────────────────────────────────
 
 /**
  * Send the reservation email to the hotel via Resend.

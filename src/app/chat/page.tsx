@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef, useCallback } from "react";
 import Header from "@/components/layout/Header";
-import { BookingRequest, ChatMessage, HotelOptionCard } from "@/lib/types";
+import { BookingRequest, ChatMessage, HotelOptionCard, FlightOptionCard, RestaurantOptionCard } from "@/lib/types";
 import { cn, formatDateTime, statusLabel } from "@/lib/utils";
 import StatusBadge from "@/components/ui/StatusBadge";
 import {
@@ -27,6 +27,7 @@ export default function ChatPage() {
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [agentMode, setAgentMode] = useState(false);
+  const [conciseMode, setConciseMode] = useState(false);
   const [llmStatus, setLlmStatus] = useState<{ ok: boolean; model: string } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -70,6 +71,16 @@ export default function ChatPage() {
   const activeBooking = bookings.find((b) => b.id === activeBookingId);
 
   // Are options still selectable? Only if booking is in options_presented state.
+  // Sync concise mode to booking
+  useEffect(() => {
+    if (!activeBookingId) return;
+    fetch("/api/bookings", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: activeBookingId, conciseMode }),
+    }).catch(() => {});
+  }, [conciseMode, activeBookingId]);
+
   const optionsSelectable = activeBooking?.status === "options_presented" && !sending;
 
   async function handleSend(
@@ -123,11 +134,14 @@ export default function ChatPage() {
     handleSend(input);
   }
 
-  function handleOptionSelect(option: HotelOptionCard, index: number) {
+  function handleOptionSelect(option: HotelOptionCard | FlightOptionCard | RestaurantOptionCard, index: number) {
     if (!optionsSelectable) return;
-    // Send structured selection — deterministic, no LLM needed
+    const label =
+      "hotelName" in option ? `${option.hotelName} - ${option.roomType}` :
+      "airline" in option ? `${option.airline} ${option.flightNumber}` :
+      (option as RestaurantOptionCard).restaurantName;
     handleSend(
-      `I'll take option ${index + 1}: ${option.hotelName} - ${option.roomType}`,
+      `I'll take option ${index + 1}: ${label}`,
       { type: "option_selected", optionIndex: index, optionId: option.optionId },
     );
   }
@@ -291,6 +305,17 @@ export default function ChatPage() {
                   {agentMode && (
                     <span className="text-[10px] text-violet-500 ml-1">Typing as agent — bypasses AI</span>
                   )}
+                  <div className="ml-auto">
+                    <button
+                      onClick={() => setConciseMode(!conciseMode)}
+                      className={cn(
+                        "px-3 py-1 rounded-full text-xs font-medium transition-colors",
+                        conciseMode ? "bg-sky-100 text-sky-700" : "text-gray-400 hover:text-gray-600"
+                      )}
+                    >
+                      {conciseMode ? "Concise" : "Standard"}
+                    </button>
+                  </div>
                 </div>
                 <div className="flex items-center gap-3">
                   <input
@@ -301,13 +326,11 @@ export default function ChatPage() {
                     placeholder={
                       agentMode
                         ? "Type as agent (bypasses AI)..."
-                        : activeBooking.status === "confirmed"
-                          ? "Booking confirmed!"
-                          : activeBooking.status === "cancelled"
-                            ? "Booking cancelled"
-                            : activeBooking.status === "options_presented"
-                              ? "Click an option above, or type your preference..."
-                              : "Type customer message..."
+                        : activeBooking.status === "cancelled"
+                          ? "Booking cancelled"
+                          : activeBooking.status === "options_presented"
+                            ? "Click an option above, or type your preference..."
+                            : "Type customer message..."
                     }
                     className={cn(
                       "flex-1 px-4 py-2.5 bg-gray-50 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:border-transparent",
@@ -315,11 +338,11 @@ export default function ChatPage() {
                         ? "border-violet-300 focus:ring-violet-500"
                         : "border-gray-200 focus:ring-sky-500"
                     )}
-                    disabled={sending || (!agentMode && ["confirmed", "cancelled"].includes(activeBooking.status))}
+                    disabled={sending || (!agentMode && activeBooking.status === "cancelled")}
                   />
                   <button
                     onClick={handleTextSend}
-                    disabled={!input.trim() || sending || (!agentMode && ["confirmed", "cancelled"].includes(activeBooking.status))}
+                    disabled={!input.trim() || sending || (!agentMode && activeBooking.status === "cancelled")}
                     className={cn(
                       "px-4 py-2.5 text-white rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2",
                       agentMode
@@ -355,22 +378,57 @@ export default function ChatPage() {
               Booking Details
             </h3>
             <div className="space-y-4 text-sm">
+              {activeBooking.category && (
+                <div className="px-2 py-1 bg-gray-100 rounded text-xs font-medium text-gray-600 inline-block capitalize">
+                  {activeBooking.category}
+                </div>
+              )}
               <DetailRow label="Name" value={activeBooking.customer.name} />
-              <DetailRow label="Passport" value={activeBooking.customer.passport} />
               <DetailRow label="Email" value={activeBooking.customer.email} />
               <DetailRow label="Phone" value={activeBooking.customer.phone} />
-              <DetailRow label="Nationality" value={activeBooking.customer.nationality} />
-              <hr className="border-gray-100" />
-              <DetailRow label="Destination" value={activeBooking.travel.destination} />
-              <DetailRow label="Check-in" value={activeBooking.travel.checkIn} />
-              <DetailRow label="Check-out" value={activeBooking.travel.checkOut} />
-              <DetailRow label="Guests" value={String(activeBooking.travel.guestCount || "")} />
-              <hr className="border-gray-100" />
-              <DetailRow label="Room Type" value={activeBooking.preferences.roomType} />
-              <DetailRow
-                label="Budget"
-                value={activeBooking.preferences.maxBudgetPerNight ? `$${activeBooking.preferences.maxBudgetPerNight}/night` : ""}
-              />
+
+              {(!activeBooking.category || activeBooking.category === "hotel") && (
+                <>
+                  <DetailRow label="Passport" value={activeBooking.customer.passport} />
+                  <DetailRow label="Nationality" value={activeBooking.customer.nationality} />
+                  <hr className="border-gray-100" />
+                  <DetailRow label="Destination" value={activeBooking.travel.destination} />
+                  <DetailRow label="Check-in" value={activeBooking.travel.checkIn} />
+                  <DetailRow label="Check-out" value={activeBooking.travel.checkOut} />
+                  <DetailRow label="Guests" value={String(activeBooking.travel.guestCount || "")} />
+                  <hr className="border-gray-100" />
+                  <DetailRow label="Room Type" value={activeBooking.preferences.roomType} />
+                  <DetailRow label="Budget" value={activeBooking.preferences.maxBudgetPerNight ? `$${activeBooking.preferences.maxBudgetPerNight}/night` : ""} />
+                </>
+              )}
+
+              {activeBooking.category === "flight" && activeBooking.flightDetails && (
+                <>
+                  <DetailRow label="Passport" value={activeBooking.customer.passport} />
+                  <DetailRow label="Nationality" value={activeBooking.customer.nationality} />
+                  <hr className="border-gray-100" />
+                  <DetailRow label="Origin" value={activeBooking.flightDetails.origin} />
+                  <DetailRow label="Destination" value={activeBooking.flightDetails.destination} />
+                  <DetailRow label="Departure" value={activeBooking.flightDetails.departureDate} />
+                  <DetailRow label="Return" value={activeBooking.flightDetails.returnDate} />
+                  <DetailRow label="Passengers" value={String(activeBooking.flightDetails.passengers || "")} />
+                  <DetailRow label="Cabin Class" value={activeBooking.flightDetails.cabinClass} />
+                  <DetailRow label="Budget" value={activeBooking.flightDetails.maxBudget ? `$${activeBooking.flightDetails.maxBudget}` : ""} />
+                </>
+              )}
+
+              {activeBooking.category === "restaurant" && activeBooking.restaurantDetails && (
+                <>
+                  <hr className="border-gray-100" />
+                  <DetailRow label="Location" value={activeBooking.restaurantDetails.location} />
+                  <DetailRow label="Date" value={activeBooking.restaurantDetails.date} />
+                  <DetailRow label="Time" value={activeBooking.restaurantDetails.time} />
+                  <DetailRow label="Party Size" value={String(activeBooking.restaurantDetails.partySize || "")} />
+                  <DetailRow label="Cuisine" value={activeBooking.restaurantDetails.cuisine} />
+                  <DetailRow label="Price Range" value={activeBooking.restaurantDetails.priceRange ? `$${activeBooking.restaurantDetails.priceRange}/person` : ""} />
+                </>
+              )}
+
               <DetailRow label="Special Requests" value={activeBooking.preferences.specialRequests} />
 
               {["collecting_info", "filling_template", "sent_to_hotel", "confirmed"].includes(activeBooking.status) && (
@@ -380,8 +438,12 @@ export default function ChatPage() {
                     Personal Info Checklist
                   </h4>
                   <ChecklistItem label="Full Name" value={activeBooking.customer.name} />
-                  <ChecklistItem label="Passport" value={activeBooking.customer.passport} />
-                  <ChecklistItem label="Nationality" value={activeBooking.customer.nationality} />
+                  {activeBooking.category !== "restaurant" && (
+                    <>
+                      <ChecklistItem label="Passport" value={activeBooking.customer.passport} />
+                      <ChecklistItem label="Nationality" value={activeBooking.customer.nationality} />
+                    </>
+                  )}
                   <ChecklistItem label="Email" value={activeBooking.customer.email} />
                   <ChecklistItem label="Phone" value={activeBooking.customer.phone} />
                 </>
@@ -430,7 +492,26 @@ function WorkflowProgress({ status }: { status: string }) {
 
 // ─── Hotel Option Card ──────────────────────────────────────────────────────
 
+type AnyOptionCard = HotelOptionCard | FlightOptionCard | RestaurantOptionCard;
+
 function OptionCard({
+  option,
+  index,
+  onSelect,
+  selectable,
+}: {
+  option: AnyOptionCard;
+  index: number;
+  onSelect: (option: AnyOptionCard, index: number) => void;
+  selectable: boolean;
+}) {
+  // Dispatch to type-specific card
+  if ("airline" in option) return <FlightCard option={option} index={index} onSelect={onSelect} selectable={selectable} />;
+  if ("restaurantName" in option) return <RestaurantCard option={option} index={index} onSelect={onSelect} selectable={selectable} />;
+  return <HotelCard option={option} index={index} onSelect={onSelect} selectable={selectable} />;
+}
+
+function HotelCard({
   option,
   index,
   onSelect,
@@ -438,7 +519,7 @@ function OptionCard({
 }: {
   option: HotelOptionCard;
   index: number;
-  onSelect: (option: HotelOptionCard, index: number) => void;
+  onSelect: (option: AnyOptionCard, index: number) => void;
   selectable: boolean;
 }) {
   const isTopPick = index === 0;
@@ -531,6 +612,113 @@ function OptionCard({
   );
 }
 
+function FlightCard({
+  option,
+  index,
+  onSelect,
+  selectable,
+}: {
+  option: FlightOptionCard;
+  index: number;
+  onSelect: (option: AnyOptionCard, index: number) => void;
+  selectable: boolean;
+}) {
+  const isTopPick = index === 0;
+  return (
+    <button
+      onClick={() => selectable && onSelect(option, index)}
+      disabled={!selectable}
+      className={cn(
+        "w-full text-left rounded-xl border-2 p-4 transition-all duration-200",
+        selectable ? "cursor-pointer hover:border-sky-400 hover:shadow-md hover:-translate-y-0.5" : "cursor-default opacity-75",
+        isTopPick && selectable ? "border-sky-300 bg-sky-50/50" : "border-gray-200 bg-white",
+      )}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex items-center gap-2.5">
+          <span className={cn("w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold flex-shrink-0", isTopPick ? "bg-sky-500 text-white" : "bg-gray-100 text-gray-600")}>{index + 1}</span>
+          <div>
+            <p className="text-sm font-semibold text-gray-900">{option.airline} {option.flightNumber}</p>
+            <p className="text-xs text-gray-500">{option.origin} → {option.destination}</p>
+          </div>
+        </div>
+        <div className="text-right flex-shrink-0">
+          <p className="text-base font-bold text-gray-900">${option.price}<span className="text-xs font-normal text-gray-400">/person</span></p>
+        </div>
+      </div>
+      <div className="flex items-center gap-3 mt-2.5">
+        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700">{option.cabinClass}</span>
+        <span className="text-[10px] text-gray-500">Departs: {option.departureDate}</span>
+        <span className={cn("text-[10px] font-semibold px-1.5 py-0.5 rounded-full", option.score >= 80 ? "bg-emerald-100 text-emerald-700" : option.score >= 60 ? "bg-amber-100 text-amber-700" : "bg-gray-100 text-gray-600")}>{option.score}% match</span>
+        {isTopPick && <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-sky-100 text-sky-700">Best Match</span>}
+      </div>
+      {selectable && (
+        <div className={cn("mt-3 py-2 rounded-lg text-xs font-semibold text-center transition-colors", isTopPick ? "bg-sky-500 text-white" : "bg-gray-100 text-gray-700")}>
+          <span className="flex items-center justify-center gap-1.5"><Check className="w-3.5 h-3.5" />Select This Flight</span>
+        </div>
+      )}
+    </button>
+  );
+}
+
+function RestaurantCard({
+  option,
+  index,
+  onSelect,
+  selectable,
+}: {
+  option: RestaurantOptionCard;
+  index: number;
+  onSelect: (option: AnyOptionCard, index: number) => void;
+  selectable: boolean;
+}) {
+  const isTopPick = index === 0;
+  return (
+    <button
+      onClick={() => selectable && onSelect(option, index)}
+      disabled={!selectable}
+      className={cn(
+        "w-full text-left rounded-xl border-2 p-4 transition-all duration-200",
+        selectable ? "cursor-pointer hover:border-sky-400 hover:shadow-md hover:-translate-y-0.5" : "cursor-default opacity-75",
+        isTopPick && selectable ? "border-sky-300 bg-sky-50/50" : "border-gray-200 bg-white",
+      )}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex items-center gap-2.5">
+          <span className={cn("w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold flex-shrink-0", isTopPick ? "bg-sky-500 text-white" : "bg-gray-100 text-gray-600")}>{index + 1}</span>
+          <div>
+            <p className="text-sm font-semibold text-gray-900">{option.restaurantName}</p>
+            <p className="text-xs text-gray-500">{option.cuisine} · {option.location}</p>
+          </div>
+        </div>
+        <div className="text-right flex-shrink-0">
+          <p className="text-base font-bold text-gray-900">${option.priceRange}<span className="text-xs font-normal text-gray-400">/person</span></p>
+        </div>
+      </div>
+      <div className="flex items-center gap-3 mt-2.5">
+        <div className="flex items-center gap-0.5">
+          {Array.from({ length: Math.round(option.rating) }).map((_, i) => (
+            <Star key={i} className="w-3 h-3 text-amber-400 fill-amber-400" />
+          ))}
+        </div>
+        <span className={cn("text-[10px] font-semibold px-1.5 py-0.5 rounded-full", option.score >= 80 ? "bg-emerald-100 text-emerald-700" : option.score >= 60 ? "bg-amber-100 text-amber-700" : "bg-gray-100 text-gray-600")}>{option.score}% match</span>
+        {isTopPick && <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-sky-100 text-sky-700">Best Match</span>}
+      </div>
+      <div className="flex flex-wrap gap-1 mt-2.5">
+        {option.amenities.slice(0, 5).map((a) => (
+          <span key={a} className="text-[10px] px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded">{a}</span>
+        ))}
+        {option.amenities.length > 5 && <span className="text-[10px] px-1.5 py-0.5 bg-gray-100 text-gray-400 rounded">+{option.amenities.length - 5} more</span>}
+      </div>
+      {selectable && (
+        <div className={cn("mt-3 py-2 rounded-lg text-xs font-semibold text-center transition-colors", isTopPick ? "bg-sky-500 text-white" : "bg-gray-100 text-gray-700")}>
+          <span className="flex items-center justify-center gap-1.5"><Check className="w-3.5 h-3.5" />Select This Restaurant</span>
+        </div>
+      )}
+    </button>
+  );
+}
+
 // ─── Message Bubble ─────────────────────────────────────────────────────────
 
 function MessageBubble({
@@ -539,12 +727,12 @@ function MessageBubble({
   optionsSelectable,
 }: {
   message: ChatMessage;
-  onSelectOption: (option: HotelOptionCard, index: number) => void;
+  onSelectOption: (option: AnyOptionCard, index: number) => void;
   optionsSelectable: boolean;
 }) {
   if (message.role === "system") {
-    // Hotel response styling
-    if (message.metadata?.type === "hotel_response") {
+    // Provider response styling
+    if (message.metadata?.type === "hotel_response" || message.metadata?.type === "provider_response") {
       const resp = message.metadata;
       const styles = {
         confirmed: "bg-emerald-50 border-emerald-200 text-emerald-700",
@@ -576,7 +764,7 @@ function MessageBubble({
   }
 
   const isCustomer = message.role === "customer";
-  const hasOptionCards = !isCustomer && message.metadata?.type === "hotel_options";
+  const hasOptionCards = !isCustomer && (message.metadata?.type === "hotel_options" || message.metadata?.type === "flight_options" || message.metadata?.type === "restaurant_options");
 
   // Customer selection message — show as a compact confirmation
   if (isCustomer && message.metadata?.type === "option_selected") {
@@ -618,26 +806,15 @@ function MessageBubble({
           </div>
         )}
 
-        {/* Option cards — rendered when metadata has hotel_options */}
-        {hasOptionCards && message.metadata?.type === "hotel_options" && (
+        {/* Option cards — rendered when metadata has any option type */}
+        {hasOptionCards && (message.metadata?.type === "hotel_options" || message.metadata?.type === "flight_options" || message.metadata?.type === "restaurant_options") && (
           <div className="w-full space-y-3">
-            {/* Brief intro above cards */}
             <div className="bg-white text-gray-800 border border-gray-200 rounded-2xl rounded-bl-md px-4 py-2.5 text-sm">
               <p>Here are the best options I found for you. {optionsSelectable ? "Click one to select it:" : ""}</p>
-              <p className={cn("text-[10px] mt-1.5 text-gray-400")}>
-                {formatDateTime(message.timestamp)}
-              </p>
+              <p className={cn("text-[10px] mt-1.5 text-gray-400")}>{formatDateTime(message.timestamp)}</p>
             </div>
-
-            {/* Cards */}
-            {message.metadata.options.map((opt, i) => (
-              <OptionCard
-                key={opt.optionId}
-                option={opt}
-                index={i}
-                onSelect={onSelectOption}
-                selectable={optionsSelectable}
-              />
+            {message.metadata.options.map((opt: AnyOptionCard, i: number) => (
+              <OptionCard key={opt.optionId} option={opt} index={i} onSelect={onSelectOption} selectable={optionsSelectable} />
             ))}
           </div>
         )}

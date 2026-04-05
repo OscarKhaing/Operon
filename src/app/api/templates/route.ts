@@ -25,6 +25,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Option not found" }, { status: 404 });
   }
 
+  if (option.category !== "hotel") {
+    return NextResponse.json({ error: "Templates only supported for hotel bookings" }, { status: 400 });
+  }
+
   const template = selectTemplate(option.hotelId);
   if (!template) {
     return NextResponse.json({ error: "No template found for hotel" }, { status: 404 });
