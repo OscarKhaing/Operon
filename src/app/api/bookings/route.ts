@@ -7,12 +7,20 @@ import { v4 as uuid } from "uuid";
 // Transform backend booking to frontend BookingRequest
 function transformBooking(backendBooking: any): BookingRequest {
   const statusMap: { [key: string]: BookingRequest['status'] } = {
+    // Backend statuses (with spaces)
     'intake': 'intake',
     'extracting': 'extracting',
+    'matching': 'matching',
     'options presented': 'options_presented',
+    'selected': 'selected',
+    'collecting_info': 'collecting_info',
+    'awaiting_payment': 'awaiting_payment',
+    'filling_template': 'filling_template',
     'sent to hotel': 'sent_to_hotel',
     'confirmed': 'confirmed',
-    'cancelled': 'cancelled'
+    'cancelled': 'cancelled',
+    'options_presented': 'options_presented',
+    'sent_to_hotel': 'sent_to_hotel',
   };
 
   return {
