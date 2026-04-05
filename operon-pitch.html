@@ -1,0 +1,1396 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Operon — Clerkless Pitch Deck</title>
+
+    <!-- Fonts: Archivo (display) + Nunito (body) -->
+    <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;700;800;900&family=Nunito:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        /* ===========================================
+           CSS CUSTOM PROPERTIES (SWISS MODERN THEME)
+           Change these to restyle the entire deck
+           =========================================== */
+        :root {
+            /* Colors */
+            --bg-primary: #ffffff;
+            --bg-dark: #0a0a0a;
+            --text-primary: #000000;
+            --text-secondary: #555555;
+            --text-muted: #999999;
+            --accent: #ff3300;
+            --accent-light: rgba(255, 51, 0, 0.08);
+            --accent-glow: rgba(255, 51, 0, 0.15);
+            --border: #e0e0e0;
+            --card-bg: #f7f7f7;
+
+            /* Typography — ALL clamp() */
+            --font-display: 'Archivo', sans-serif;
+            --font-body: 'Nunito', sans-serif;
+            --title-size: clamp(2rem, 6vw, 5rem);
+            --h2-size: clamp(1.5rem, 4vw, 3rem);
+            --h3-size: clamp(1rem, 2vw, 1.5rem);
+            --subtitle-size: clamp(0.85rem, 1.5vw, 1.2rem);
+            --body-size: clamp(0.75rem, 1.3vw, 1.05rem);
+            --small-size: clamp(0.6rem, 0.9vw, 0.8rem);
+            --number-size: clamp(0.7rem, 1vw, 0.9rem);
+
+            /* Spacing — ALL clamp() */
+            --slide-padding: clamp(1.5rem, 5vw, 5rem);
+            --content-gap: clamp(0.75rem, 2vw, 2rem);
+            --element-gap: clamp(0.25rem, 1vw, 1rem);
+
+            /* Animation */
+            --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+            --duration-normal: 0.7s;
+        }
+
+        /* ===========================================
+           RESET
+           =========================================== */
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        /* ===========================================
+           VIEWPORT FITTING: MANDATORY BASE STYLES
+           =========================================== */
+        html, body {
+            height: 100%;
+            overflow-x: hidden;
+        }
+
+        html {
+            scroll-snap-type: y mandatory;
+            scroll-behavior: smooth;
+        }
+
+        .slide {
+            width: 100vw;
+            height: 100vh;
+            height: 100dvh;
+            overflow: hidden;
+            scroll-snap-align: start;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+
+        .slide-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            max-height: 100%;
+            overflow: hidden;
+            padding: var(--slide-padding);
+        }
+
+        .card, .container, .content-box {
+            max-width: min(90vw, 1000px);
+            max-height: min(80vh, 700px);
+        }
+
+        .feature-list, .bullet-list {
+            gap: clamp(0.4rem, 1vh, 1rem);
+        }
+
+        .feature-list li, .bullet-list li {
+            font-size: var(--body-size);
+            line-height: 1.4;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr));
+            gap: clamp(0.5rem, 1.5vw, 1rem);
+        }
+
+        img, .image-container {
+            max-width: 100%;
+            max-height: min(50vh, 400px);
+            object-fit: contain;
+        }
+
+        /* Short viewports */
+        @media (max-height: 700px) {
+            :root {
+                --slide-padding: clamp(0.75rem, 3vw, 2rem);
+                --content-gap: clamp(0.4rem, 1.5vw, 1rem);
+                --title-size: clamp(1.25rem, 4.5vw, 2.5rem);
+                --h2-size: clamp(1rem, 3vw, 1.75rem);
+            }
+        }
+
+        @media (max-height: 600px) {
+            :root {
+                --slide-padding: clamp(0.5rem, 2.5vw, 1.5rem);
+                --content-gap: clamp(0.3rem, 1vw, 0.75rem);
+                --title-size: clamp(1.1rem, 4vw, 2rem);
+                --body-size: clamp(0.7rem, 1.2vw, 0.95rem);
+            }
+            .nav-dots, .keyboard-hint, .decorative {
+                display: none;
+            }
+        }
+
+        @media (max-height: 500px) {
+            :root {
+                --slide-padding: clamp(0.4rem, 2vw, 1rem);
+                --title-size: clamp(1rem, 3.5vw, 1.5rem);
+                --h2-size: clamp(0.9rem, 2.5vw, 1.25rem);
+                --body-size: clamp(0.65rem, 1vw, 0.85rem);
+            }
+        }
+
+        @media (max-width: 600px) {
+            :root {
+                --title-size: clamp(1.25rem, 7vw, 2.5rem);
+            }
+            .grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                animation-duration: 0.01ms !important;
+                transition-duration: 0.2s !important;
+            }
+            html {
+                scroll-behavior: auto;
+            }
+        }
+
+        /* ===========================================
+           GLOBAL SLIDE STYLES — SWISS MODERN
+           =========================================== */
+        body {
+            font-family: var(--font-body);
+            color: var(--text-primary);
+            background: var(--bg-primary);
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .slide {
+            background: var(--bg-primary);
+            padding-left: clamp(3rem, 8vw, 8rem);
+            padding-right: clamp(3rem, 8vw, 8rem);
+        }
+
+        /* === RED ACCENT BAR (left edge) === */
+        .slide::before {
+            content: '';
+            position: absolute; left: 0; top: 0;
+            width: clamp(5px, 0.6vw, 10px);
+            height: 100%;
+            background: var(--accent);
+            z-index: 5;
+        }
+
+        /* === 12-COLUMN GRID OVERLAY === */
+        .slide::after {
+            content: '';
+            position: absolute; inset: 0;
+            background:
+                repeating-linear-gradient(
+                    90deg,
+                    transparent,
+                    transparent calc(100% / 12 - 1px),
+                    rgba(0,0,0,0.025) calc(100% / 12 - 1px),
+                    rgba(0,0,0,0.025) calc(100% / 12)
+                );
+            pointer-events: none; z-index: 0;
+        }
+
+        /* === SLIDE NUMBER (bottom-left) === */
+        .slide-num {
+            position: absolute;
+            bottom: clamp(1.2rem, 2.5vh, 2.5rem);
+            left: clamp(3rem, 8vw, 8rem);
+            font-family: var(--font-display);
+            font-size: var(--small-size);
+            font-weight: 800;
+            letter-spacing: 0.15em;
+            color: var(--text-muted);
+            z-index: 3;
+        }
+
+        /* === TYPOGRAPHY === */
+        h1 {
+            font-family: var(--font-display);
+            font-size: var(--title-size);
+            font-weight: 900;
+            line-height: 0.95;
+            letter-spacing: -0.02em;
+            color: var(--text-primary);
+        }
+
+        h2 {
+            font-family: var(--font-display);
+            font-size: var(--h2-size);
+            font-weight: 800;
+            line-height: 1;
+            letter-spacing: -0.02em;
+            color: var(--text-primary);
+            margin-bottom: var(--content-gap);
+        }
+
+        h3 {
+            font-family: var(--font-display);
+            font-size: var(--h3-size);
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        p, li {
+            font-family: var(--font-body);
+            font-size: var(--body-size);
+            line-height: 1.55;
+            color: var(--text-secondary);
+        }
+
+        .label {
+            font-family: var(--font-display);
+            font-size: var(--small-size);
+            font-weight: 800;
+            letter-spacing: 0.25em;
+            text-transform: uppercase;
+            color: var(--accent);
+        }
+
+        /* ===========================================
+           REVEAL ANIMATION SYSTEM
+           =========================================== */
+        .reveal {
+            opacity: 0;
+            transform: translateY(25px);
+            transition: opacity var(--duration-normal) var(--ease-out-expo),
+                        transform var(--duration-normal) var(--ease-out-expo);
+        }
+
+        .slide.visible .reveal {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .reveal-d1 { transition-delay: 0.1s; }
+        .reveal-d2 { transition-delay: 0.2s; }
+        .reveal-d3 { transition-delay: 0.3s; }
+        .reveal-d4 { transition-delay: 0.4s; }
+        .reveal-d5 { transition-delay: 0.5s; }
+        .reveal-d6 { transition-delay: 0.6s; }
+
+        /* ===========================================
+           GEOMETRIC DECORATION ELEMENTS
+           =========================================== */
+        .geo-circle {
+            position: absolute;
+            border: clamp(3px, 0.35vw, 5px) solid var(--accent);
+            border-radius: 50%;
+            z-index: 1;
+            pointer-events: none;
+        }
+
+        .geo-line-h {
+            position: absolute;
+            height: clamp(2px, 0.3vw, 4px);
+            background: var(--text-primary);
+            z-index: 1;
+            pointer-events: none;
+        }
+
+        .geo-line-v {
+            position: absolute;
+            width: clamp(2px, 0.3vw, 4px);
+            background: var(--text-primary);
+            z-index: 1;
+            pointer-events: none;
+        }
+
+        .geo-dot {
+            position: absolute;
+            background: var(--accent);
+            border-radius: 50%;
+            z-index: 1;
+            pointer-events: none;
+        }
+
+        .geo-rect {
+            position: absolute;
+            border: clamp(2px, 0.25vw, 4px) solid var(--text-primary);
+            z-index: 1;
+            pointer-events: none;
+        }
+
+        /* ===========================================
+           SLIDE 1: TITLE
+           =========================================== */
+        .title-slide .slide-content {
+            justify-content: center;
+            z-index: 2;
+            position: relative;
+        }
+
+        .title-slide .label {
+            margin-bottom: clamp(0.5rem, 1.5vh, 1.5rem);
+        }
+
+        .title-slide h1 {
+            margin-bottom: clamp(0.75rem, 2vh, 2rem);
+        }
+
+        .title-slide .subtitle {
+            max-width: clamp(280px, 35vw, 460px);
+        }
+
+        .title-slide .geo-circle {
+            width: clamp(160px, 22vw, 320px);
+            height: clamp(160px, 22vw, 320px);
+            top: 12%; right: 10%;
+        }
+
+        .title-slide .geo-line-h {
+            width: clamp(80px, 12vw, 180px);
+            bottom: 25%; right: 8%;
+        }
+
+        .title-slide .geo-dot {
+            width: clamp(10px, 1.2vw, 18px);
+            height: clamp(10px, 1.2vw, 18px);
+            bottom: 23%; right: calc(8% + clamp(80px, 12vw, 180px) + 12px);
+        }
+
+        /* ===========================================
+           DARK SLIDES (inverted)
+           =========================================== */
+        .slide-dark {
+            background: var(--bg-dark);
+            color: #ffffff;
+        }
+
+        .slide-dark::before {
+            background: var(--accent);
+        }
+
+        .slide-dark::after {
+            background:
+                repeating-linear-gradient(
+                    90deg,
+                    transparent,
+                    transparent calc(100% / 12 - 1px),
+                    rgba(255,255,255,0.025) calc(100% / 12 - 1px),
+                    rgba(255,255,255,0.025) calc(100% / 12)
+                );
+        }
+
+        .slide-dark h2, .slide-dark h3 { color: #ffffff; }
+        .slide-dark p, .slide-dark li { color: rgba(255,255,255,0.65); }
+        .slide-dark .label { color: var(--accent); }
+        .slide-dark .slide-num { color: rgba(255,255,255,0.25); }
+
+        /* ===========================================
+           CONTENT CARDS
+           =========================================== */
+        .content-grid {
+            display: grid;
+            gap: clamp(0.6rem, 1.5vw, 1.25rem);
+            margin-top: var(--content-gap);
+        }
+
+        .content-grid.cols-2 {
+            grid-template-columns: repeat(2, 1fr);
+        }
+
+        .content-grid.cols-3 {
+            grid-template-columns: repeat(3, 1fr);
+        }
+
+        @media (max-width: 700px) {
+            .content-grid.cols-3,
+            .content-grid.cols-2 {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .content-card {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: clamp(6px, 0.8vw, 12px);
+            padding: clamp(0.8rem, 1.8vw, 1.5rem);
+        }
+
+        .slide-dark .content-card {
+            background: rgba(255,255,255,0.05);
+            border-color: rgba(255,255,255,0.08);
+        }
+
+        .content-card .card-icon {
+            font-size: clamp(1.2rem, 2vw, 1.8rem);
+            margin-bottom: clamp(0.3rem, 0.6vh, 0.6rem);
+        }
+
+        .content-card h3 {
+            font-size: clamp(0.8rem, 1.3vw, 1.1rem);
+            margin-bottom: clamp(0.2rem, 0.4vh, 0.4rem);
+        }
+
+        .content-card p {
+            font-size: var(--small-size);
+            line-height: 1.45;
+        }
+
+        /* ===========================================
+           BULLET LIST STYLE
+           =========================================== */
+        .swiss-list {
+            list-style: none;
+            margin-top: var(--content-gap);
+        }
+
+        .swiss-list li {
+            padding-left: clamp(1.2rem, 2vw, 2rem);
+            position: relative;
+            margin-bottom: clamp(0.4rem, 0.8vh, 0.8rem);
+        }
+
+        .swiss-list li::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: clamp(0.4rem, 0.7vh, 0.6rem);
+            width: clamp(6px, 0.8vw, 10px);
+            height: clamp(2px, 0.25vw, 3px);
+            background: var(--accent);
+        }
+
+        .slide-dark .swiss-list li::before {
+            background: var(--accent);
+        }
+
+        /* ===========================================
+           PROCESS FLOW (horizontal steps)
+           =========================================== */
+        .process-flow {
+            display: flex;
+            gap: clamp(0.3rem, 0.6vw, 0.6rem);
+            margin-top: var(--content-gap);
+            flex-wrap: wrap;
+        }
+
+        .process-step {
+            flex: 1;
+            min-width: clamp(80px, 10vw, 120px);
+            text-align: center;
+            padding: clamp(0.5rem, 1vw, 1rem) clamp(0.3rem, 0.5vw, 0.6rem);
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: clamp(4px, 0.5vw, 8px);
+            position: relative;
+        }
+
+        .slide-dark .process-step {
+            background: rgba(255,255,255,0.05);
+            border-color: rgba(255,255,255,0.1);
+        }
+
+        .process-step .step-num {
+            font-family: var(--font-display);
+            font-size: var(--small-size);
+            font-weight: 800;
+            color: var(--accent);
+            margin-bottom: clamp(0.15rem, 0.3vh, 0.3rem);
+        }
+
+        .process-step .step-label {
+            font-size: clamp(0.55rem, 0.85vw, 0.75rem);
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .slide-dark .process-step .step-label {
+            color: #ffffff;
+        }
+
+        /* ===========================================
+           STAT BLOCKS
+           =========================================== */
+        .stat-row {
+            display: flex;
+            gap: clamp(1rem, 3vw, 3rem);
+            margin-top: var(--content-gap);
+        }
+
+        .stat-block .stat-value {
+            font-family: var(--font-display);
+            font-size: clamp(1.8rem, 4.5vw, 3.5rem);
+            font-weight: 900;
+            color: var(--accent);
+            line-height: 1;
+        }
+
+        .stat-block .stat-label {
+            font-size: var(--small-size);
+            color: var(--text-muted);
+            margin-top: clamp(0.2rem, 0.4vh, 0.4rem);
+        }
+
+        .slide-dark .stat-block .stat-label {
+            color: rgba(255,255,255,0.4);
+        }
+
+        /* ===========================================
+           TWO-COLUMN LAYOUT
+           =========================================== */
+        .two-col {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: clamp(1.5rem, 4vw, 4rem);
+            align-items: center;
+        }
+
+        @media (max-width: 700px) {
+            .two-col {
+                grid-template-columns: 1fr;
+                gap: var(--content-gap);
+            }
+        }
+
+        /* ===========================================
+           ROADMAP TIMELINE
+           =========================================== */
+        .timeline {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: clamp(0.5rem, 1vw, 1rem);
+            margin-top: var(--content-gap);
+        }
+
+        @media (max-width: 700px) {
+            .timeline {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        .timeline-item {
+            border-top: clamp(2px, 0.3vw, 4px) solid var(--border);
+            padding-top: clamp(0.5rem, 1vh, 1rem);
+        }
+
+        .timeline-item.active {
+            border-top-color: var(--accent);
+        }
+
+        .timeline-item .tl-phase {
+            font-family: var(--font-display);
+            font-size: var(--small-size);
+            font-weight: 800;
+            color: var(--accent);
+            margin-bottom: clamp(0.15rem, 0.3vh, 0.3rem);
+        }
+
+        .timeline-item h3 {
+            font-size: clamp(0.75rem, 1.1vw, 0.95rem);
+            margin-bottom: clamp(0.15rem, 0.3vh, 0.3rem);
+        }
+
+        .timeline-item p {
+            font-size: clamp(0.55rem, 0.8vw, 0.72rem);
+        }
+
+        /* ===========================================
+           CTA SLIDE
+           =========================================== */
+        .cta-block {
+            margin-top: var(--content-gap);
+            display: flex;
+            gap: clamp(0.5rem, 1.5vw, 1.5rem);
+            flex-wrap: wrap;
+        }
+
+        .cta-btn {
+            font-family: var(--font-display);
+            font-size: var(--body-size);
+            font-weight: 700;
+            padding: clamp(0.6rem, 1.2vw, 1rem) clamp(1.2rem, 2.5vw, 2rem);
+            border: clamp(2px, 0.25vw, 3px) solid var(--text-primary);
+            background: transparent;
+            color: var(--text-primary);
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            transition: all 0.25s ease;
+        }
+
+        .cta-btn:hover {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: #ffffff;
+        }
+
+        .slide-dark .cta-btn {
+            border-color: #ffffff;
+            color: #ffffff;
+        }
+
+        .slide-dark .cta-btn:hover {
+            background: var(--accent);
+            border-color: var(--accent);
+        }
+
+        /* ===========================================
+           PROGRESS BAR
+           =========================================== */
+        .progress-bar {
+            position: fixed; top: 0; left: 0;
+            height: clamp(2px, 0.3vh, 4px);
+            background: var(--accent);
+            z-index: 9999;
+            transition: width 0.3s ease;
+            width: 0%;
+        }
+
+        /* ===========================================
+           NAV DOTS
+           =========================================== */
+        .nav-dots {
+            position: fixed;
+            right: clamp(0.8rem, 1.5vw, 1.5rem);
+            top: 50%;
+            transform: translateY(-50%);
+            display: flex;
+            flex-direction: column;
+            gap: clamp(4px, 0.5vh, 8px);
+            z-index: 9998;
+        }
+
+        .nav-dot {
+            width: clamp(6px, 0.6vw, 10px);
+            height: clamp(6px, 0.6vw, 10px);
+            border-radius: 50%;
+            background: var(--border);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: none;
+            padding: 0;
+        }
+
+        .nav-dot.active {
+            background: var(--accent);
+            transform: scale(1.4);
+        }
+
+        /* ===========================================
+           INLINE EDITING
+           =========================================== */
+        .edit-hotzone {
+            position: fixed; top: 0; left: 0;
+            width: 80px; height: 80px;
+            z-index: 10000;
+            cursor: pointer;
+        }
+
+        .edit-toggle {
+            position: fixed;
+            top: clamp(0.8rem, 1.5vh, 1.2rem);
+            left: clamp(0.8rem, 1.5vw, 1.2rem);
+            font-size: clamp(0.9rem, 1.5vw, 1.3rem);
+            background: var(--bg-primary);
+            border: 2px solid var(--border);
+            border-radius: 8px;
+            padding: 6px 10px;
+            cursor: pointer;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+            z-index: 10001;
+        }
+
+        .edit-toggle.show,
+        .edit-toggle.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .edit-toggle.active {
+            background: var(--accent);
+            border-color: var(--accent);
+        }
+
+        .edit-bar {
+            position: fixed;
+            bottom: 0; left: 0; right: 0;
+            background: var(--bg-dark);
+            color: #ffffff;
+            padding: clamp(0.4rem, 0.8vh, 0.6rem) clamp(1rem, 2vw, 2rem);
+            display: none;
+            justify-content: space-between;
+            align-items: center;
+            font-family: var(--font-body);
+            font-size: var(--small-size);
+            z-index: 10002;
+        }
+
+        .edit-bar.show { display: flex; }
+
+        .edit-bar button {
+            background: var(--accent);
+            color: #ffffff;
+            border: none;
+            padding: 4px 12px;
+            font-family: var(--font-display);
+            font-size: var(--small-size);
+            font-weight: 700;
+            cursor: pointer;
+            letter-spacing: 0.05em;
+        }
+
+        [contenteditable="true"] {
+            outline: 2px dashed var(--accent);
+            outline-offset: 4px;
+            cursor: text;
+        }
+
+        /* ===========================================
+           DIAGRAM: CHAT FLOW VISUAL
+           =========================================== */
+        .chat-flow {
+            display: flex;
+            align-items: center;
+            gap: clamp(0.5rem, 1.2vw, 1.2rem);
+            margin-top: var(--content-gap);
+        }
+
+        .chat-node {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: clamp(8px, 1vw, 14px);
+            padding: clamp(0.6rem, 1.2vw, 1.2rem);
+            text-align: center;
+            flex: 1;
+        }
+
+        .slide-dark .chat-node {
+            background: rgba(255,255,255,0.06);
+            border-color: rgba(255,255,255,0.1);
+        }
+
+        .chat-node .node-icon {
+            font-size: clamp(1.2rem, 2.2vw, 2rem);
+            margin-bottom: clamp(0.2rem, 0.4vh, 0.4rem);
+        }
+
+        .chat-node .node-label {
+            font-family: var(--font-display);
+            font-size: clamp(0.6rem, 0.9vw, 0.8rem);
+            font-weight: 700;
+        }
+
+        .chat-arrow {
+            font-size: clamp(0.8rem, 1.3vw, 1.2rem);
+            color: var(--accent);
+            flex-shrink: 0;
+        }
+
+        .slide-dark .chat-arrow {
+            color: var(--accent);
+        }
+    </style>
+</head>
+<body>
+
+    <!-- === PROGRESS BAR === -->
+    <div class="progress-bar" id="progressBar"></div>
+
+    <!-- === NAV DOTS === -->
+    <nav class="nav-dots" id="navDots" aria-label="Slide navigation"></nav>
+
+    <!-- === INLINE EDITING CONTROLS === -->
+    <div class="edit-hotzone" id="editHotzone"></div>
+    <button class="edit-toggle" id="editToggle" title="Edit mode (E)">&#9998;</button>
+    <div class="edit-bar" id="editBar">
+        <span>Edit Mode — click any text to edit &bull; Ctrl+S to save</span>
+        <button id="editExport">Export HTML</button>
+    </div>
+
+
+    <!-- ===========================================
+         SLIDE 01 — TITLE
+         =========================================== -->
+    <section class="slide title-slide" aria-label="Title">
+        <div class="slide-content">
+            <p class="label reveal">Clerkless Automation</p>
+            <h1 class="reveal reveal-d1">Operon</h1>
+            <p class="subtitle reveal reveal-d2">Replacing human operators with<br>intelligent chat-driven booking.</p>
+        </div>
+        <div class="geo-circle decorative"></div>
+        <div class="geo-line-h decorative" style="width:clamp(80px,12vw,180px); bottom:25%; right:8%;"></div>
+        <div class="geo-dot decorative" style="width:clamp(10px,1.2vw,18px); height:clamp(10px,1.2vw,18px); bottom:23%; right:calc(8% + clamp(80px,12vw,180px) + 12px);"></div>
+        <div class="slide-num">01 / 13</div>
+    </section>
+
+
+    <!-- ===========================================
+         SLIDE 02 — THE PROBLEM
+         =========================================== -->
+    <section class="slide" aria-label="The Problem">
+        <div class="slide-content">
+            <p class="label reveal">The Problem</p>
+            <h2 class="reveal reveal-d1">Travel agencies are stuck<br>in a manual loop</h2>
+            <ul class="swiss-list reveal reveal-d2">
+                <li>Smaller agencies hire full-time staff for repetitive booking tasks</li>
+                <li>Each booking follows the same steps: intake, quote, collect info, send to hotel, confirm</li>
+                <li>Human operators spend hours on copy-paste workflows across emails, spreadsheets, and hotel portals</li>
+                <li>The process is tedious, error-prone, and doesn't scale</li>
+            </ul>
+        </div>
+        <div class="geo-rect decorative" style="width:clamp(100px,14vw,200px); height:clamp(100px,14vw,200px); top:10%; right:6%;"></div>
+        <div class="slide-num">02 / 13</div>
+    </section>
+
+
+    <!-- ===========================================
+         SLIDE 03 — THE SCALE
+         =========================================== -->
+    <section class="slide slide-dark" aria-label="The Scale">
+        <div class="slide-content">
+            <p class="label reveal">The Opportunity</p>
+            <h2 class="reveal reveal-d1">A massive market trapped<br>in manual workflows</h2>
+            <div class="stat-row reveal reveal-d2">
+                <div class="stat-block">
+                    <div class="stat-value">70%</div>
+                    <div class="stat-label">of booking agencies under<br>50 employees still process<br>reservations manually</div>
+                </div>
+                <div class="stat-block">
+                    <div class="stat-value">8hrs</div>
+                    <div class="stat-label">average daily time spent<br>by a single clerk on<br>repetitive booking tasks</div>
+                </div>
+                <div class="stat-block">
+                    <div class="stat-value">30s</div>
+                    <div class="stat-label">the time Operon takes<br>to complete what a human<br>does in 15 minutes</div>
+                </div>
+            </div>
+        </div>
+        <div class="slide-num">03 / 13</div>
+    </section>
+
+
+    <!-- ===========================================
+         SLIDE 04 — THE SOLUTION
+         =========================================== -->
+    <section class="slide" aria-label="The Solution">
+        <div class="slide-content">
+            <p class="label reveal">The Solution</p>
+            <h2 class="reveal reveal-d1">An AI agent that handles<br>the entire booking cycle</h2>
+            <p class="reveal reveal-d2" style="max-width: clamp(400px, 50vw, 640px);">Operon replaces the human operator. Customers chat naturally — via your web chatroom or Instagram DMs — and receive a confirmed booking in under 30 seconds. No forms. No hold times. No human in the loop.</p>
+            <div class="chat-flow reveal reveal-d3">
+                <div class="chat-node">
+                    <div class="node-icon">&#128172;</div>
+                    <div class="node-label">Customer chats</div>
+                </div>
+                <div class="chat-arrow">&#8594;</div>
+                <div class="chat-node">
+                    <div class="node-icon">&#9881;</div>
+                    <div class="node-label">Operon processes</div>
+                </div>
+                <div class="chat-arrow">&#8594;</div>
+                <div class="chat-node">
+                    <div class="node-icon">&#9993;</div>
+                    <div class="node-label">Booking confirmed</div>
+                </div>
+            </div>
+        </div>
+        <div class="slide-num">04 / 13</div>
+    </section>
+
+
+    <!-- ===========================================
+         SLIDE 05 — HOW IT WORKS (CUSTOMER)
+         =========================================== -->
+    <section class="slide slide-dark" aria-label="Customer Experience">
+        <div class="slide-content">
+            <p class="label reveal">Customer Experience</p>
+            <h2 class="reveal reveal-d1">Just talk. We handle<br>the rest.</h2>
+            <ul class="swiss-list reveal reveal-d2">
+                <li>Customer opens the chat — on your website or via Instagram DM</li>
+                <li>They describe what they need in plain language: dates, location, preferences</li>
+                <li>Operon extracts details, finds availability, and negotiates the best rate</li>
+                <li>A booking confirmation email lands in their inbox within 30 seconds</li>
+            </ul>
+        </div>
+        <div class="geo-circle decorative" style="width:clamp(120px,16vw,240px); height:clamp(120px,16vw,240px); bottom:8%; right:6%; border-color:rgba(255,255,255,0.08);"></div>
+        <div class="slide-num">05 / 13</div>
+    </section>
+
+
+    <!-- ===========================================
+         SLIDE 06 — CHANNELS
+         =========================================== -->
+    <section class="slide" aria-label="Channels">
+        <div class="slide-content">
+            <p class="label reveal">Omnichannel</p>
+            <h2 class="reveal reveal-d1">Meet customers where<br>they already are</h2>
+            <div class="content-grid cols-2 reveal reveal-d2">
+                <div class="content-card">
+                    <div class="card-icon">&#127760;</div>
+                    <h3>Web Chatroom</h3>
+                    <p>Embed Operon directly on your agency's website. Customers get instant responses without leaving the page.</p>
+                </div>
+                <div class="content-card">
+                    <div class="card-icon">&#128247;</div>
+                    <h3>Instagram DMs</h3>
+                    <p>Connect your Instagram business account. Customers book through the same app they browse travel inspiration on.</p>
+                </div>
+            </div>
+        </div>
+        <div class="slide-num">06 / 13</div>
+    </section>
+
+
+    <!-- ===========================================
+         SLIDE 07 — THE DASHBOARD
+         =========================================== -->
+    <section class="slide slide-dark" aria-label="Dashboard">
+        <div class="slide-content">
+            <p class="label reveal">Operator Dashboard</p>
+            <h2 class="reveal reveal-d1">Full visibility into every<br>booking in real time</h2>
+            <div class="process-flow reveal reveal-d2">
+                <div class="process-step">
+                    <div class="step-num">01</div>
+                    <div class="step-label">Intake</div>
+                </div>
+                <div class="process-step">
+                    <div class="step-num">02</div>
+                    <div class="step-label">Extracting</div>
+                </div>
+                <div class="process-step">
+                    <div class="step-num">03</div>
+                    <div class="step-label">Quote</div>
+                </div>
+                <div class="process-step">
+                    <div class="step-num">04</div>
+                    <div class="step-label">Info Collection</div>
+                </div>
+                <div class="process-step">
+                    <div class="step-num">05</div>
+                    <div class="step-label">Sent to Hotel</div>
+                </div>
+                <div class="process-step">
+                    <div class="step-num">06</div>
+                    <div class="step-label">Confirmed</div>
+                </div>
+            </div>
+            <p class="reveal reveal-d3" style="margin-top: var(--content-gap); max-width: clamp(350px, 45vw, 550px);">Track every customer's progress through the pipeline. No more guessing where a booking stands — the dashboard shows it all at a glance.</p>
+        </div>
+        <div class="slide-num">07 / 13</div>
+    </section>
+
+
+    <!-- ===========================================
+         SLIDE 08 — DATABASE & ANALYTICS
+         =========================================== -->
+    <section class="slide" aria-label="Database">
+        <div class="slide-content">
+            <p class="label reveal">Centralized Data</p>
+            <h2 class="reveal reveal-d1">Every booking, one place,<br>zero spreadsheets</h2>
+            <div class="content-grid cols-3 reveal reveal-d2">
+                <div class="content-card">
+                    <div class="card-icon">&#128451;</div>
+                    <h3>Unified Records</h3>
+                    <p>All bookings aggregated into a single searchable database. Filter by date, status, customer, or hotel.</p>
+                </div>
+                <div class="content-card">
+                    <div class="card-icon">&#128200;</div>
+                    <h3>Booking Analytics</h3>
+                    <p>Track volume, conversion rates, and revenue across all channels in real time.</p>
+                </div>
+                <div class="content-card">
+                    <div class="card-icon">&#128274;</div>
+                    <h3>Audit Trail</h3>
+                    <p>Complete conversation and booking history for every customer interaction — compliance-ready.</p>
+                </div>
+            </div>
+        </div>
+        <div class="slide-num">08 / 13</div>
+    </section>
+
+
+    <!-- ===========================================
+         SLIDE 09 — CURRENT PRODUCT
+         =========================================== -->
+    <section class="slide slide-dark" aria-label="Current Product">
+        <div class="slide-content">
+            <p class="label reveal">Live Now</p>
+            <h2 class="reveal reveal-d1">Hotel bookings,<br>fully automated</h2>
+            <ul class="swiss-list reveal reveal-d2">
+                <li>End-to-end hotel booking — from customer inquiry to confirmation email</li>
+                <li>Integrated with partner hotel systems for live availability and rates</li>
+                <li>Handles negotiation and rate comparison automatically</li>
+                <li>Already serving travel agencies with contracted hotel partners</li>
+            </ul>
+        </div>
+        <div class="geo-dot decorative" style="width:clamp(60px,8vw,120px); height:clamp(60px,8vw,120px); top:12%; right:8%; opacity:0.15;"></div>
+        <div class="slide-num">09 / 13</div>
+    </section>
+
+
+    <!-- ===========================================
+         SLIDE 10 — EXPANSION ROADMAP
+         =========================================== -->
+    <section class="slide" aria-label="Roadmap">
+        <div class="slide-content">
+            <p class="label reveal">Roadmap</p>
+            <h2 class="reveal reveal-d1">From hotels to the<br>entire travel stack</h2>
+            <div class="timeline reveal reveal-d2">
+                <div class="timeline-item active">
+                    <div class="tl-phase">Now</div>
+                    <h3>Hotels</h3>
+                    <p>Live and operational. Full booking automation with partner facilities.</p>
+                </div>
+                <div class="timeline-item">
+                    <div class="tl-phase">Next</div>
+                    <h3>Flights</h3>
+                    <p>Airline search, comparison, and automated ticketing via chat.</p>
+                </div>
+                <div class="timeline-item">
+                    <div class="tl-phase">Q3</div>
+                    <h3>Restaurants</h3>
+                    <p>Reservation management for dining and culinary experiences.</p>
+                </div>
+                <div class="timeline-item">
+                    <div class="tl-phase">Q4</div>
+                    <h3>Transport &amp; Entertainment</h3>
+                    <p>Car rentals, museum tickets, tours, and activity bookings.</p>
+                </div>
+            </div>
+        </div>
+        <div class="slide-num">10 / 13</div>
+    </section>
+
+
+    <!-- ===========================================
+         SLIDE 11 — WHY NOW
+         =========================================== -->
+    <section class="slide slide-dark" aria-label="Why Now">
+        <div class="slide-content">
+            <p class="label reveal">Why Now</p>
+            <h2 class="reveal reveal-d1">The timing is right</h2>
+            <div class="content-grid cols-3 reveal reveal-d2">
+                <div class="content-card">
+                    <div class="card-icon">&#9889;</div>
+                    <h3>AI Capability Leap</h3>
+                    <p>LLMs can now reliably understand natural language requests, extract structured data, and execute multi-step workflows.</p>
+                </div>
+                <div class="content-card">
+                    <div class="card-icon">&#128176;</div>
+                    <h3>Rising Labor Costs</h3>
+                    <p>Hiring clerks for repetitive tasks is increasingly expensive — especially for small agencies competing on margins.</p>
+                </div>
+                <div class="content-card">
+                    <div class="card-icon">&#128241;</div>
+                    <h3>Chat-First Consumers</h3>
+                    <p>Customers already prefer messaging over phone calls. Booking via chat feels natural — not novel.</p>
+                </div>
+            </div>
+        </div>
+        <div class="slide-num">11 / 13</div>
+    </section>
+
+
+    <!-- ===========================================
+         SLIDE 12 — BUSINESS MODEL
+         =========================================== -->
+    <section class="slide" aria-label="Business Model">
+        <div class="slide-content">
+            <p class="label reveal">Business Model</p>
+            <h2 class="reveal reveal-d1">How Clerkless<br>makes money</h2>
+            <div class="content-grid cols-2 reveal reveal-d2">
+                <div class="content-card">
+                    <div class="card-icon">&#128257;</div>
+                    <h3>Per-Booking Fee</h3>
+                    <p>A small fee on each completed booking. Agencies pay only when Operon delivers value — fully aligned incentives.</p>
+                </div>
+                <div class="content-card">
+                    <div class="card-icon">&#128188;</div>
+                    <h3>Platform Subscription</h3>
+                    <p>Monthly access to the dashboard, analytics, and multi-channel integrations. Tiered by booking volume.</p>
+                </div>
+            </div>
+        </div>
+        <div class="geo-line-v decorative" style="height:clamp(80px,12vh,160px); top:8%; right:10%;"></div>
+        <div class="slide-num">12 / 13</div>
+    </section>
+
+
+    <!-- ===========================================
+         SLIDE 13 — CTA / THE ASK
+         =========================================== -->
+    <section class="slide slide-dark" aria-label="Call to Action">
+        <div class="slide-content">
+            <p class="label reveal">Let's Talk</p>
+            <h2 class="reveal reveal-d1">Clerkless automation<br>starts here</h2>
+            <p class="reveal reveal-d2" style="max-width: clamp(350px, 40vw, 520px);">We're building the operating system for travel agencies that want to scale without scaling headcount. Join us.</p>
+            <div class="cta-block reveal reveal-d3">
+                <button class="cta-btn">Get a Demo</button>
+                <button class="cta-btn">Partner With Us</button>
+            </div>
+        </div>
+        <div class="geo-circle decorative" style="width:clamp(200px,28vw,400px); height:clamp(200px,28vw,400px); bottom:5%; right:5%; border-color:rgba(255,255,255,0.06);"></div>
+        <div class="slide-num">13 / 13</div>
+    </section>
+
+
+    <!-- ===========================================
+       JAVASCRIPT: SLIDE CONTROLLER
+       =========================================== -->
+    <script>
+        /* === SLIDE PRESENTATION CONTROLLER === */
+        class SlidePresentation {
+            constructor() {
+                this.slides = document.querySelectorAll('.slide');
+                this.currentSlide = 0;
+                this.isScrolling = false;
+
+                this.setupIntersectionObserver();
+                this.setupKeyboardNav();
+                this.setupTouchNav();
+                this.setupWheelNav();
+                this.setupProgressBar();
+                this.setupNavDots();
+            }
+
+            /* --- Intersection Observer: triggers .visible --- */
+            setupIntersectionObserver() {
+                const observer = new IntersectionObserver((entries) => {
+                    entries.forEach(entry => {
+                        if (entry.isIntersecting) {
+                            entry.target.classList.add('visible');
+                            const idx = Array.from(this.slides).indexOf(entry.target);
+                            if (idx !== -1) {
+                                this.currentSlide = idx;
+                                this.updateProgressBar();
+                                this.updateNavDots();
+                            }
+                        }
+                    });
+                }, { threshold: 0.5 });
+
+                this.slides.forEach(slide => observer.observe(slide));
+            }
+
+            /* --- Keyboard: arrows, space, page up/down --- */
+            setupKeyboardNav() {
+                document.addEventListener('keydown', (e) => {
+                    if (e.target.getAttribute('contenteditable')) return;
+                    switch(e.key) {
+                        case 'ArrowDown':
+                        case 'ArrowRight':
+                        case ' ':
+                        case 'PageDown':
+                            e.preventDefault();
+                            this.goToSlide(this.currentSlide + 1);
+                            break;
+                        case 'ArrowUp':
+                        case 'ArrowLeft':
+                        case 'PageUp':
+                            e.preventDefault();
+                            this.goToSlide(this.currentSlide - 1);
+                            break;
+                        case 'Home':
+                            e.preventDefault();
+                            this.goToSlide(0);
+                            break;
+                        case 'End':
+                            e.preventDefault();
+                            this.goToSlide(this.slides.length - 1);
+                            break;
+                    }
+                });
+            }
+
+            /* --- Touch/swipe --- */
+            setupTouchNav() {
+                let startY = 0;
+                document.addEventListener('touchstart', (e) => {
+                    startY = e.touches[0].clientY;
+                }, { passive: true });
+                document.addEventListener('touchend', (e) => {
+                    const diff = startY - e.changedTouches[0].clientY;
+                    if (Math.abs(diff) > 50) {
+                        this.goToSlide(this.currentSlide + (diff > 0 ? 1 : -1));
+                    }
+                }, { passive: true });
+            }
+
+            /* --- Mouse wheel --- */
+            setupWheelNav() {
+                let timeout;
+                document.addEventListener('wheel', (e) => {
+                    if (this.isScrolling) return;
+                    clearTimeout(timeout);
+                    timeout = setTimeout(() => {
+                        if (Math.abs(e.deltaY) > 30) {
+                            this.isScrolling = true;
+                            this.goToSlide(this.currentSlide + (e.deltaY > 0 ? 1 : -1));
+                            setTimeout(() => { this.isScrolling = false; }, 800);
+                        }
+                    }, 50);
+                }, { passive: true });
+            }
+
+            /* --- Navigate to slide --- */
+            goToSlide(index) {
+                if (index < 0 || index >= this.slides.length) return;
+                this.currentSlide = index;
+                this.slides[index].scrollIntoView({ behavior: 'smooth' });
+                this.updateProgressBar();
+                this.updateNavDots();
+            }
+
+            /* --- Progress bar --- */
+            setupProgressBar() {
+                this.progressBar = document.getElementById('progressBar');
+                this.updateProgressBar();
+            }
+
+            updateProgressBar() {
+                if (!this.progressBar) return;
+                const pct = ((this.currentSlide + 1) / this.slides.length) * 100;
+                this.progressBar.style.width = pct + '%';
+            }
+
+            /* --- Nav dots --- */
+            setupNavDots() {
+                const container = document.getElementById('navDots');
+                if (!container) return;
+                this.slides.forEach((_, i) => {
+                    const dot = document.createElement('button');
+                    dot.className = 'nav-dot' + (i === 0 ? ' active' : '');
+                    dot.setAttribute('aria-label', 'Go to slide ' + (i + 1));
+                    dot.addEventListener('click', () => this.goToSlide(i));
+                    container.appendChild(dot);
+                });
+                this.dots = container.querySelectorAll('.nav-dot');
+            }
+
+            updateNavDots() {
+                if (!this.dots) return;
+                this.dots.forEach((dot, i) => {
+                    dot.classList.toggle('active', i === this.currentSlide);
+                });
+            }
+        }
+
+        /* === INLINE EDITOR === */
+        class InlineEditor {
+            constructor() {
+                this.isActive = false;
+                this.editToggle = document.getElementById('editToggle');
+                this.editBar = document.getElementById('editBar');
+                this.setupControls();
+                this.loadSaved();
+            }
+
+            setupControls() {
+                const hotzone = document.getElementById('editHotzone');
+                let hideTimeout = null;
+
+                /* Toggle button click */
+                this.editToggle.addEventListener('click', () => this.toggleEditMode());
+
+                /* Hotzone hover with 400ms grace period */
+                hotzone.addEventListener('mouseenter', () => {
+                    clearTimeout(hideTimeout);
+                    this.editToggle.classList.add('show');
+                });
+                hotzone.addEventListener('mouseleave', () => {
+                    hideTimeout = setTimeout(() => {
+                        if (!this.isActive) this.editToggle.classList.remove('show');
+                    }, 400);
+                });
+                this.editToggle.addEventListener('mouseenter', () => {
+                    clearTimeout(hideTimeout);
+                });
+                this.editToggle.addEventListener('mouseleave', () => {
+                    hideTimeout = setTimeout(() => {
+                        if (!this.isActive) this.editToggle.classList.remove('show');
+                    }, 400);
+                });
+
+                /* Hotzone direct click */
+                hotzone.addEventListener('click', () => this.toggleEditMode());
+
+                /* Keyboard shortcut E */
+                document.addEventListener('keydown', (e) => {
+                    if ((e.key === 'e' || e.key === 'E') && !e.target.getAttribute('contenteditable')) {
+                        this.toggleEditMode();
+                    }
+                });
+
+                /* Ctrl+S to save */
+                document.addEventListener('keydown', (e) => {
+                    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+                        e.preventDefault();
+                        this.save();
+                    }
+                });
+
+                /* Export button */
+                document.getElementById('editExport').addEventListener('click', () => this.exportHTML());
+            }
+
+            toggleEditMode() {
+                this.isActive = !this.isActive;
+                this.editToggle.classList.toggle('active', this.isActive);
+                this.editBar.classList.toggle('show', this.isActive);
+
+                const editables = document.querySelectorAll('h1, h2, h3, p:not(.slide-num), .step-label, .stat-value, .stat-label, .tl-phase, .label');
+                editables.forEach(el => {
+                    if (!el.closest('.edit-bar') && !el.closest('.nav-dots')) {
+                        el.contentEditable = this.isActive ? 'true' : 'false';
+                    }
+                });
+
+                if (this.isActive) {
+                    this.editToggle.classList.add('show');
+                }
+            }
+
+            save() {
+                const data = {};
+                document.querySelectorAll('[contenteditable="true"]').forEach((el, i) => {
+                    data['edit_' + i] = el.innerHTML;
+                });
+                localStorage.setItem('operon_pitch_edits', JSON.stringify(data));
+            }
+
+            loadSaved() {
+                const data = localStorage.getItem('operon_pitch_edits');
+                if (!data) return;
+                /* Saved edits are restored when edit mode is toggled on */
+            }
+
+            exportHTML() {
+                /* Remove contenteditable before export */
+                document.querySelectorAll('[contenteditable]').forEach(el => {
+                    el.removeAttribute('contenteditable');
+                });
+                const html = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
+                const blob = new Blob([html], { type: 'text/html' });
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = 'operon-pitch-exported.html';
+                a.click();
+                URL.revokeObjectURL(a.href);
+                /* Re-enable editing */
+                this.toggleEditMode();
+                this.toggleEditMode();
+            }
+        }
+
+        /* === INIT === */
+        const presentation = new SlidePresentation();
+        const editor = new InlineEditor();
+    </script>
+</body>
+</html>

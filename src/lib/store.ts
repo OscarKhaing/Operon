@@ -4,6 +4,7 @@
  */
 import {
   BookingRequest,
+  HotelRecord,
   TemplateRecord,
   ChatMessage,
   BookingOption,
@@ -89,6 +90,21 @@ class Store {
   // ----- Options -----
   clearOptions(bookingId: string): void {
     this.options = this.options.filter((o) => o.bookingId !== bookingId);
+  }
+
+  // ----- Hotel cache (per-booking, partial DB retrieval) -----
+  private hotelCache = new Map<string, HotelRecord[]>();
+
+  getHotelCache(bookingId: string): HotelRecord[] | undefined {
+    return this.hotelCache.get(bookingId);
+  }
+
+  setHotelCache(bookingId: string, hotels: HotelRecord[]): void {
+    this.hotelCache.set(bookingId, hotels);
+  }
+
+  clearHotelCache(bookingId: string): void {
+    this.hotelCache.delete(bookingId);
   }
 
   // ----- Transactions -----

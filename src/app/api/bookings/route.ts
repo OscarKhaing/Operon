@@ -53,8 +53,22 @@ export async function GET() {
       throw new Error('Failed to fetch bookings from backend');
     }
     const backendBookings = await response.json();
-    const transformedBookings = backendBookings.map(transformBooking);
-    return NextResponse.json(transformedBookings);
+    const transformedBookings: BookingRequest[] = backendBookings.map(transformBooking);
+
+    // Sync backend bookings into the in-memory store so the
+    // chat/workflow system (which relies on store.getBooking()) can find them.
+    for (const tb of transformedBookings) {
+      if (!store.getBooking(tb.id)) {
+        store.createBooking(tb);
+      }
+    }
+
+    // Include any in-memory-only bookings (e.g. newly created via "New Booking"
+    // button) that don't exist in the backend yet.
+    const backendIds = new Set(transformedBookings.map((b) => b.id));
+    const localOnly = store.getBookings().filter((b) => !backendIds.has(b.id));
+
+    return NextResponse.json([...transformedBookings, ...localOnly]);
   } catch (error) {
     console.error('Error fetching bookings:', error);
     // Fallback to mock data if backend is not available

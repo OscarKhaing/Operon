@@ -22,7 +22,7 @@ import {
 import { generateDummyPdf } from "./pdf-dummy";
 import { sendReservationEmail, sendCancellationEmail } from "./email";
 import { simulateHotelResponse } from "./hotel-response";
-import { fetchHotelById } from "./hotel-api";
+import { fetchHotelById, fetchHotels, fetchAvailableLocations } from "./hotel-api";
 import { v4 as uuid } from "uuid";
 
 /**
@@ -78,15 +78,30 @@ async function handleCollectingPreferences(
 ): Promise<WorkflowResult> {
   const convo = recentConversation(booking.id);
 
-  // LLM extraction (Gemini + schema constraints handle hallucination prevention)
-  const prefs = await extractPreferences(convo);
+  // Fetch available locations for LLM to match against
+  const availableLocations = await fetchAvailableLocations();
+
+  // LLM extraction with location list for standardization
+  const prefs = await extractPreferences(convo, availableLocations);
 
   // Merge extraction into booking (only non-null fields)
   const travelUpdates: Record<string, unknown> = {};
-  if (prefs.destination) travelUpdates.destination = prefs.destination;
   if (prefs.checkIn) travelUpdates.checkIn = prefs.checkIn;
   if (prefs.checkOut) travelUpdates.checkOut = prefs.checkOut;
   if (prefs.guestCount) travelUpdates.guestCount = prefs.guestCount;
+
+  // Handle destination separately — detect changes for hotel cache management
+  const previousDestination = booking.travel.destination;
+  if (prefs.destination) {
+    travelUpdates.destination = prefs.destination;
+
+    // If destination changed, clear cached hotels so we re-fetch for new location
+    if (previousDestination && previousDestination !== prefs.destination) {
+      store.clearHotelCache(booking.id);
+      store.clearOptions(booking.id);
+      addMsg(booking.id, "system", `Destination changed: ${previousDestination} → ${prefs.destination}`);
+    }
+  }
 
   const prefUpdates: Record<string, unknown> = {};
   if (prefs.roomType) prefUpdates.roomType = prefs.roomType;
@@ -103,6 +118,31 @@ async function handleCollectingPreferences(
     });
   }
 
+  // Pre-load hotels for the resolved destination (partial DB retrieval)
+  const resolvedDestination = prefs.destination || booking.travel.destination;
+  if (resolvedDestination && !store.getHotelCache(booking.id)) {
+    const hotels = await fetchHotels({ location: resolvedDestination });
+    if (hotels.length > 0) {
+      store.setHotelCache(booking.id, hotels);
+      addMsg(booking.id, "system", `Loaded ${hotels.length} hotels for ${resolvedDestination}`);
+    } else if (prefs.destination && !availableLocations.some(
+      (loc) => loc.toLowerCase().includes(prefs.destination!.toLowerCase()) ||
+               prefs.destination!.toLowerCase().includes(loc.toLowerCase())
+    )) {
+      // Destination doesn't match any hotel in our pool — tell the customer early
+      addMsg(booking.id, "system", `No hotels in pool for: ${resolvedDestination}`);
+      // Clear the destination so they can try again
+      store.updateBooking(booking.id, {
+        travel: { ...store.getBooking(booking.id)!.travel, destination: "" },
+      });
+      return text(
+        `Unfortunately, we don't have contracted hotels in ${resolvedDestination} at the moment. ` +
+        `Our current destinations include: ${availableLocations.join(", ")}.\n\n` +
+        `Would you like to choose one of these, or I can recommend checking Booking.com or Agoda for ${resolvedDestination}?`
+      );
+    }
+  }
+
   // Log extraction
   const extracted = Object.entries(prefs)
     .filter(([, v]) => v !== null)
@@ -113,8 +153,6 @@ async function handleCollectingPreferences(
   }
 
   // ── Determine what's known vs missing ──
-  // Use the CUMULATIVE booking state (not just this extraction round).
-  // Defaults are empty/zero, so simple truthiness distinguishes "set" from "unset".
   const updated = store.getBooking(booking.id)!;
   const knownFields: Record<string, string | number | null> = {
     destination: updated.travel.destination || null,
@@ -130,13 +168,10 @@ async function handleCollectingPreferences(
   );
 
   if (requiredMissing.length === 0) {
-    // All required preferences collected — transition to matching.
-    // Optional fields (guestCount, roomType, maxBudget) will use defaults/show all.
     store.updateBooking(booking.id, { status: "matching" });
     return handleMatching(booking.id);
   }
 
-  // Still collecting required fields — ask for missing (include optional hints naturally)
   store.updateBooking(booking.id, { status: "extracting" });
   const allMissing = [...requiredMissing, ...optionalMissing];
   const reply = await generatePreferenceReply(convo, knownFields, allMissing);
@@ -147,7 +182,8 @@ async function handleCollectingPreferences(
 
 async function handleMatching(bookingId: string): Promise<WorkflowResult> {
   const booking = store.getBooking(bookingId)!;
-  const { options, hotelMap } = await findOptions(booking);
+  const cachedHotels = store.getHotelCache(bookingId);
+  const { options, hotelMap } = await findOptions(booking, cachedHotels);
   store.addOptions(options);
 
   if (options.length === 0) {
@@ -399,12 +435,22 @@ async function triggerDispatch(bookingId: string, option: BookingOption): Promis
   // 4. Simulate hotel response (confirmed / more info needed / no availability)
   simulateHotelResponse(bookingId);
 
+  // The simulation runs synchronously above and always confirms,
+  // so the booking is already in "confirmed" state. Return a
+  // summary without a duplicate confirmation message (the
+  // simulator already added its own agent + system messages).
+  const updatedBooking = store.getBooking(bookingId)!;
+  const tx2 = store.getLatestTransaction(bookingId);
+  const confirmationCode = tx2?.confirmationCode ?? "";
+
   const emailNote = emailResult.success
-    ? `I've sent the reservation details to **${option.hotelName}** (${hotelEmail}).`
-    : `I prepared the reservation for **${option.hotelName}**, but the email couldn't be delivered right now. Our team will follow up manually.`;
+    ? `The reservation details have been sent to **${option.hotelName}** (${hotelEmail}).`
+    : `The reservation was prepared for **${option.hotelName}**, but the email couldn't be delivered right now. Our team will follow up manually.`;
 
   return text(
-    `All set! ${emailNote}\n\nHere's a summary:\n- Guest: ${booking.customer.name}\n- Hotel: ${option.hotelName} - ${option.roomType.name}\n- Dates: ${booking.travel.checkIn} to ${booking.travel.checkOut}\n- Total: $${option.totalPrice}\n\nThe hotel will confirm shortly. I'll notify you once confirmed!`
+    `${emailNote}\n\nHere's your summary:\n- Guest: ${updatedBooking.customer.name}\n- Hotel: ${option.hotelName} - ${option.roomType.name}\n- Dates: ${updatedBooking.travel.checkIn} to ${updatedBooking.travel.checkOut}\n- Total: $${option.totalPrice}` +
+    (confirmationCode ? `\n- Confirmation Code: **${confirmationCode}**` : "") +
+    `\n\nYou're all set!`
   );
 }
 
@@ -423,8 +469,8 @@ async function handleSentToHotel(
     // Reset the transaction state so the simulator can act again
     store.updateTransaction(tx.id, { hotelResponseType: undefined, hotelMessage: undefined });
 
-    // Re-send with high confirmation bias (90%)
-    simulateHotelResponse(booking.id, 0.9);
+    // Re-simulate (always confirms now)
+    simulateHotelResponse(booking.id);
 
     return text(
       "Thank you for providing that information! I've forwarded it to the hotel. We should hear back shortly."

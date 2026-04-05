@@ -194,7 +194,7 @@ CRITICAL RULES:
 - Look at the ENTIRE conversation to combine info from multiple messages (e.g., "UK" in one message and "$300" in the next).
 
 Field-specific rules:
-- destination: Extract the place name exactly as stated. Can be a country ("UK"), city ("London"), or region ("Southeast Asia"). Use null if no location mentioned.
+- destination: You MUST match the customer's location to an entry from the AVAILABLE_LOCATIONS list. Use the EXACT string from the list. Neighborhoods, districts, landmarks, and abbreviations should map to their parent city (e.g. "la jolla" → "San Diego", "shibuya" → "Tokyo", "manhattan" → "New York", "camden" → "London", "NYC" → "New York"). If the customer's location genuinely does not exist in any form in the list (e.g. "Paris" when no French city is listed), output their exact input unchanged — the system will handle it. Use null if no location mentioned.
 - checkIn: YYYY-MM-DD format. Year defaults to 2026 if not stated. Use null if no arrival/check-in date mentioned.
 - checkOut: YYYY-MM-DD format. Year defaults to 2026 if not stated. Use null if no departure/check-out date mentioned.
 - guestCount: Integer. "2 guests", "two people", "for 2", "myself"=1. Use null if never mentioned.
@@ -233,9 +233,16 @@ const PREFERENCES_GEMINI_SCHEMA: Schema = {
   required: ["destination", "checkIn", "checkOut", "guestCount", "roomType", "maxBudget"],
 };
 
-export async function extractPreferences(conversationText: string): Promise<PreferencesExtraction> {
-  const prompt = `Extract ONLY what the customer explicitly stated from this conversation. Use null for anything not mentioned.
+export async function extractPreferences(
+  conversationText: string,
+  availableLocations: string[] = [],
+): Promise<PreferencesExtraction> {
+  const locationSection = availableLocations.length > 0
+    ? `\nAVAILABLE_LOCATIONS (match customer's input to the closest one):\n${availableLocations.map((l) => `- ${l}`).join("\n")}\n`
+    : "";
 
+  const prompt = `Extract ONLY what the customer explicitly stated from this conversation. Use null for anything not mentioned.
+${locationSection}
 """
 ${conversationText}
 """

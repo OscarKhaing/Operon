@@ -1,9 +1,8 @@
 /**
  * Simulates hotel email responses to reservation requests.
- * Three possible outcomes with weighted random selection:
- *   - Confirmed (60%)       → booking confirmed with code
- *   - More info needed (25%) → hotel asks for additional details
- *   - No availability (15%)  → hotel rejects, room unavailable
+ * Currently always confirms deterministically (no random outcomes).
+ * Failure handlers are retained for use when real hotel responses
+ * replace the simulation.
  *
  * Replace with real email parsing / webhook ingestion in production.
  */
@@ -56,18 +55,12 @@ function pick<T>(arr: T[]): T {
 
 /**
  * Simulates a hotel response synchronously.
- * Called immediately after dispatch — the "delay" is purely UX
- * (the frontend shows "Awaiting Hotel Response" until it polls the new state).
- *
- * setTimeout is unreliable in Next.js API routes (module re-evaluation
- * between requests can orphan callbacks), so we fire synchronously.
+ * Always confirms the reservation — no random outcomes.
  *
  * @param bookingId  The booking to respond to
- * @param confirmBias  Override confirmation probability (0-1). Default uses standard weights.
  */
 export function simulateHotelResponse(
   bookingId: string,
-  confirmBias?: number,
 ): void {
   const booking = store.getBooking(bookingId);
   if (!booking || booking.status !== "sent_to_hotel") return;
@@ -75,20 +68,7 @@ export function simulateHotelResponse(
   const tx = store.getLatestTransaction(bookingId);
   if (!tx) return;
 
-  // Weighted random selection
-  const roll = Math.random();
-  const confirmThreshold = confirmBias ?? 0.60;
-  const moreInfoThreshold = confirmBias != null
-    ? confirmBias + (1 - confirmBias) * 0.8  // on retry: tiny more_info chance, no reject
-    : 0.85; // default: 60% confirm + 25% more_info = 85%
-
-  if (roll < confirmThreshold) {
-    handleConfirmed(bookingId, tx.id);
-  } else if (roll < moreInfoThreshold) {
-    handleMoreInfoNeeded(bookingId, tx.id);
-  } else {
-    handleNoAvailability(bookingId, tx.id);
-  }
+  handleConfirmed(bookingId, tx.id);
 }
 
 // ─── Response handlers ──────────────────────────────────────────────────────
@@ -120,7 +100,7 @@ function handleConfirmed(bookingId: string, transactionId: string): void {
   );
 }
 
-function handleMoreInfoNeeded(bookingId: string, transactionId: string): void {
+export function handleMoreInfoNeeded(bookingId: string, transactionId: string): void {
   const tx = store.getLatestTransaction(bookingId);
   const retryCount = (tx?.retryCount ?? 0);
 
@@ -157,7 +137,7 @@ function handleMoreInfoNeeded(bookingId: string, transactionId: string): void {
   );
 }
 
-function handleNoAvailability(bookingId: string, transactionId: string): void {
+export function handleNoAvailability(bookingId: string, transactionId: string): void {
   const reason = pick(NO_AVAILABILITY_REASONS);
   const message = `Hotel declined: ${reason}`;
 
@@ -215,3 +195,4 @@ function handleNoAvailability(bookingId: string, transactionId: string): void {
     store.updateBooking(bookingId, { status: "extracting" });
   }
 }
+

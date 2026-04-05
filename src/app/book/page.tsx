@@ -27,6 +27,7 @@ export default function CustomerChatPage() {
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   // Initialize booking
   useEffect(() => {
@@ -100,9 +101,16 @@ export default function CustomerChatPage() {
     return () => clearInterval(interval);
   }, [activeBookingId, refreshState]);
 
-  // Scroll to bottom
+  // Auto-scroll to bottom only when already near the bottom
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    const threshold = 150; // px from bottom
+    const isNearBottom =
+      container.scrollHeight - container.scrollTop - container.clientHeight < threshold;
+    if (isNearBottom) {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
   }, [messages]);
 
   const optionsSelectable = activeBooking?.status === "options_presented" && !sending;
@@ -203,7 +211,7 @@ export default function CustomerChatPage() {
 
       {/* Chat Area */}
       <div className="flex-1 flex flex-col max-w-4xl mx-auto w-full overflow-hidden px-4 md:px-0">
-        <div className="flex-1 overflow-y-auto px-4 py-6 space-y-5">
+        <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-4 py-6 space-y-5">
           {messages.length === 0 && !sending && (
              <div className="flex justify-center my-10">
                <div className="bg-sky-50 text-sky-800 text-sm px-6 py-4 rounded-xl text-center shadow-sm border border-sky-100 max-w-md">

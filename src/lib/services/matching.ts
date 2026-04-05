@@ -86,7 +86,10 @@ export interface MatchResult {
  * Find and rank hotel options for a booking.
  * Fetches from MongoDB with pre-filters, then scores locally.
  */
-export async function findOptions(booking: BookingRequest): Promise<MatchResult> {
+export async function findOptions(
+  booking: BookingRequest,
+  cachedHotels?: HotelRecord[],
+): Promise<MatchResult> {
   const nights = nightsBetween(booking.travel.checkIn, booking.travel.checkOut);
 
   const criteria: MatchCriteria = {
@@ -98,15 +101,19 @@ export async function findOptions(booking: BookingRequest): Promise<MatchResult>
     checkOut: booking.travel.checkOut,
   };
 
-  // Fetch from MongoDB — only pass filters the user actually provided.
-  // Empty strings and zero values mean "not specified" and should not constrain the query.
-  const fetchParams: Parameters<typeof fetchHotels>[0] = {};
-  if (criteria.destination) fetchParams.location = criteria.destination;
-  if (criteria.maxBudgetPerNight > 0) fetchParams.maxPrice = Math.round(criteria.maxBudgetPerNight * 1.5);
-  if (criteria.checkIn) fetchParams.checkIn = criteria.checkIn;
-  if (criteria.checkOut) fetchParams.checkOut = criteria.checkOut;
-
-  const hotels = await fetchHotels(fetchParams);
+  // Use cached hotels if available (pre-loaded when destination was set).
+  // Otherwise fall back to fetching from MongoDB with filters.
+  let hotels: HotelRecord[];
+  if (cachedHotels && cachedHotels.length > 0) {
+    hotels = cachedHotels;
+  } else {
+    const fetchParams: Parameters<typeof fetchHotels>[0] = {};
+    if (criteria.destination) fetchParams.location = criteria.destination;
+    if (criteria.maxBudgetPerNight > 0) fetchParams.maxPrice = Math.round(criteria.maxBudgetPerNight * 1.5);
+    if (criteria.checkIn) fetchParams.checkIn = criteria.checkIn;
+    if (criteria.checkOut) fetchParams.checkOut = criteria.checkOut;
+    hotels = await fetchHotels(fetchParams);
+  }
 
   // Build hotel lookup map for callers (stars, contactEmail, etc.)
   const hotelMap = new Map<string, HotelRecord>();

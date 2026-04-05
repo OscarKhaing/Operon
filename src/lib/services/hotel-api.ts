@@ -186,3 +186,33 @@ export async function fetchHotelById(hotelId: string): Promise<HotelRecord | und
     return undefined;
   }
 }
+
+// ─── Available locations (cached) ───────────────────────────────────────────
+
+let locationCache: { locations: string[]; fetchedAt: number } | null = null;
+const LOCATION_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+/**
+ * Fetch all unique hotel locations from MongoDB.
+ * Cached for 5 minutes since hotel inventory changes rarely.
+ * Returns deduplicated location strings exactly as stored in the DB.
+ */
+export async function fetchAvailableLocations(): Promise<string[]> {
+  if (locationCache && Date.now() - locationCache.fetchedAt < LOCATION_CACHE_TTL_MS) {
+    return locationCache.locations;
+  }
+
+  try {
+    const res = await fetchWithTimeout(`${API_URL}/api/hotels`);
+    if (!res.ok) return locationCache?.locations || [];
+
+    const docs: MongoHotelDoc[] = await res.json();
+    const locations = [...new Set(docs.map((d) => d.location))].sort();
+
+    locationCache = { locations, fetchedAt: Date.now() };
+    return locations;
+  } catch (err) {
+    console.error("Failed to fetch available locations:", err);
+    return locationCache?.locations || [];
+  }
+}
