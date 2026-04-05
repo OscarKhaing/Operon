@@ -25,15 +25,15 @@ export function formatDateTime(iso: string): string {
 
 export function statusLabel(status: BookingStatus, category?: BookingCategory): string {
   const labels: Record<BookingStatus, string> = {
-    intake: "Intake",
-    extracting: "Extracting Info",
-    matching: category === "flight" ? "Finding Flights" : category === "restaurant" ? "Finding Restaurants" : "Finding Hotels",
-    options_presented: "Options Sent",
+    intake: "New Inquiry",
+    extracting: "Gathering Info",
+    matching: category === "flight" ? "Searching Flights" : category === "restaurant" ? "Searching Restaurants" : "Searching Hotels",
+    options_presented: "Quoted",
     selected: "Option Selected",
-    collecting_info: "Collecting Info",
+    collecting_info: "Finalizing Details",
     awaiting_payment: "Awaiting Payment",
-    filling_template: "Processing",
-    sent_to_hotel: category === "flight" ? "Sent to Airline" : category === "restaurant" ? "Sent to Restaurant" : "Sent to Hotel",
+    filling_template: "Preparing Reservation",
+    sent_to_hotel: "Awaiting Payment",
     confirmed: "Confirmed",
     cancelled: "Cancelled",
   };
