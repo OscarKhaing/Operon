@@ -122,7 +122,7 @@ async function handlePostback(senderId: string, payload: string): Promise<void> 
 
   const metadata: MessageMetadata = {
     type: "option_selected",
-    optionIndex: selection.optionIndex,
+    optionIndex: selection.optionIndex - 1,
     optionId: selection.optionId,
   };
 
@@ -166,7 +166,7 @@ function findOrCreateInstagramBooking(senderId: string): BookingRequest {
     id: uuid(),
     customer: { name: "", passport: "", email: "", phone: "", nationality: "" },
     travel: { checkIn: "", checkOut: "", guestCount: 1, roomCount: 1, destination: "" },
-    preferences: { roomType: "standard", maxBudgetPerNight: 200, currency: "USD", specialRequests: "" },
+    preferences: { roomType: "standard", maxBudgetPerNight: 0, currency: "USD", specialRequests: "" }, 
     status: "intake",
     assignedTo: "Instagram",
     channel: "instagram",
