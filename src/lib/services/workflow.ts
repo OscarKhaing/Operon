@@ -924,7 +924,7 @@ async function handleCollectingInfo(
 
   // Still collecting — LLM generates natural follow-up
   const convoSnippet = recentConversation(booking.id, 4);
-  const reply = await generateChecklistReply(convoSnippet, collected, missing as string[]);
+  const reply = await generateChecklistReply(convoSnippet, collected, missing as string[], category);
   return text(reply);
 }
 

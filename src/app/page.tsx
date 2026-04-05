@@ -13,15 +13,16 @@ import {
   AlertCircle,
   TrendingUp,
   ClipboardList,
+  ArrowRight,
 } from "lucide-react";
 import Link from "next/link";
 
 const PIPELINE_STAGES: { status: BookingStatus; icon: React.ElementType; color: string }[] = [
   { status: "intake", icon: AlertCircle, color: "bg-indigo-50 text-indigo-600" },
-  { status: "extracting", icon: Clock, color: "bg-amber-50 text-amber-600" },
   { status: "options_presented", icon: CalendarCheck, color: "bg-blue-50 text-blue-600" },
-  { status: "collecting_info", icon: ClipboardList, color: "bg-pink-50 text-pink-600" },
-  { status: "sent_to_hotel", icon: Send, color: "bg-orange-50 text-orange-600" },
+  { status: "extracting", icon: Clock, color: "bg-amber-50 text-amber-600" },
+  // { status: "collecting_info", icon: ClipboardList, color: "bg-pink-50 text-pink-600" },
+  { status: "awaiting_payment", icon: Send, color: "bg-orange-50 text-orange-600" },
   { status: "confirmed", icon: CheckCircle2, color: "bg-emerald-50 text-emerald-600" },
 ];
 
@@ -42,6 +43,9 @@ export default function DashboardPage() {
   const activeCount = bookings.filter(
     (b) => !["confirmed", "cancelled"].includes(b.status)
   ).length;
+
+  // Limit to 7 rows for the dashboard view
+  const recentBookings = bookings.slice(0, 7);
 
   return (
     <div className="min-h-screen">
@@ -66,7 +70,7 @@ export default function DashboardPage() {
           <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4">
             Booking Pipeline
           </h2>
-          <div className="grid grid-cols-6 gap-4">
+          <div className="grid gap-4" style={{ gridTemplateColumns: `repeat(${PIPELINE_STAGES.length}, minmax(0, 1fr))` }}>
             {PIPELINE_STAGES.map((stage) => {
               const stageBookings = byStatus(stage.status);
               return (
@@ -138,7 +142,7 @@ export default function DashboardPage() {
                 </tr>
               </thead>
               <tbody>
-                {bookings.map((b) => (
+                {recentBookings.map((b) => (
                   <tr
                     key={b.id}
                     className="border-b border-gray-50 hover:bg-gray-50 transition-colors"
@@ -173,6 +177,15 @@ export default function DashboardPage() {
                 ))}
               </tbody>
             </table>
+
+            {/* View All Footer */}
+            <Link 
+              href="/bookings" 
+              className="flex items-center justify-center gap-2 w-full py-3 bg-gray-50/50 text-sm font-medium text-sky-600 hover:bg-gray-100 transition-colors border-t border-gray-100"
+            >
+              View All Bookings
+              <ArrowRight size={16} />
+            </Link>
           </div>
         </div>
       </div>

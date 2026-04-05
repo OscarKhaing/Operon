@@ -480,24 +480,40 @@ Output JSON with keys: name, passport, nationality, email, phone`;
 
 // ─── PROMPT 6: Generate checklist follow-up during info collection ──────────
 
-const CHECKLIST_CHAT_SYSTEM = `You are a friendly booking assistant collecting personal details from a customer to complete their hotel reservation.
+const CHECKLIST_CHAT_SYSTEM_HOTEL_FLIGHT = `You are a friendly booking assistant collecting personal details from a customer to complete their reservation.
 
 Rules:
 - Be warm and brief. 1-3 sentences.
 - Acknowledge any info they just provided.
 - Ask for the remaining missing items naturally.
 - Required: full name, passport number, nationality, email, phone number.
+- ONLY ask for items listed in "Still missing". Do NOT ask for items already collected.
+- When all info is collected, confirm you have everything and let them know you'll proceed.`;
+
+const CHECKLIST_CHAT_SYSTEM_RESTAURANT = `You are a friendly booking assistant collecting personal details from a customer to complete their restaurant reservation.
+
+Rules:
+- Be warm and brief. 1-3 sentences.
+- Acknowledge any info they just provided.
+- Ask for the remaining missing items naturally.
+- Required: full name, email, phone number. That's it — no passport or nationality needed for restaurants.
+- ONLY ask for items listed in "Still missing". Do NOT ask for items already collected.
 - When all info is collected, confirm you have everything and let them know you'll proceed.`;
 
 export async function generateChecklistReply(
   conversationSnippet: string,
   collectedFields: Record<string, string | null>,
-  missingFields: string[]
+  missingFields: string[],
+  category?: string,
 ): Promise<string> {
   const collected = Object.entries(collectedFields)
     .filter(([, v]) => v !== null)
     .map(([k, v]) => `${k}: ${v}`)
     .join(", ");
+
+  const systemPrompt = category === "restaurant"
+    ? CHECKLIST_CHAT_SYSTEM_RESTAURANT
+    : CHECKLIST_CHAT_SYSTEM_HOTEL_FLIGHT;
 
   const prompt = `Recent conversation:
 ${conversationSnippet}
@@ -509,7 +525,7 @@ ${missingFields.length === 0
     ? "All info is collected. Confirm to the customer that you have everything and will now process their reservation."
     : "Write a short, friendly reply asking for the missing info."}`;
 
-  return generateText(prompt, CHECKLIST_CHAT_SYSTEM, 0.5);
+  return generateText(prompt, systemPrompt, 0.5);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -605,8 +621,8 @@ CRITICAL RULES:
 - If ALREADY_KNOWN fields are provided, those fields are already set. Do NOT re-extract them unless the customer EXPLICITLY says they want to change them (e.g. "change destination to X", "actually fly to Y instead"). A customer simply providing new info for missing fields does NOT change already-known fields.
 
 Field-specific rules:
-- origin: The departure city/airport (where the customer is FLYING FROM). Match to AVAILABLE_ORIGINS if provided. Use null if not mentioned.
-- destination: The arrival city/airport (where the customer is FLYING TO). Match to AVAILABLE_DESTINATIONS if provided. Use null if not mentioned.
+- origin: The departure city/airport (where the customer is FLYING FROM). You MUST match the customer's input to an entry from the AVAILABLE_ORIGINS list. Use the EXACT string from the list. Abbreviations, nicknames, and airport codes should map to the full entry (e.g. "LA" → "Los Angeles (LAX)", "SFO" → "San Francisco (SFO)", "NYC" → "New York (JFK)", "narita" → "Tokyo (NRT)"). If the customer's city genuinely does not exist in the list, output their exact input unchanged — the system will handle it. Use null if not mentioned.
+- destination: The arrival city/airport (where the customer is FLYING TO). You MUST match the customer's input to an entry from the AVAILABLE_DESTINATIONS list. Use the EXACT string from the list. Same mapping rules as origin (e.g. "london" → "London (LHR)", "tokyo" → "Tokyo (NRT)", "singapore" → "Singapore (SIN)"). If the city genuinely does not exist in the list, output their exact input unchanged. Use null if not mentioned.
 - departureDate: YYYY-MM-DD format. Year defaults to 2026 if not stated. Use null if no departure date mentioned.
 - returnDate: YYYY-MM-DD format. Year defaults to 2026. Use null if not mentioned or one-way trip.
 - passengers: Integer. "2 tickets", "for 2", "myself"=1. Use null if never mentioned.
@@ -785,7 +801,7 @@ CRITICAL RULES:
 - If ALREADY_KNOWN fields are provided, those fields are already set. Do NOT re-extract them unless the customer EXPLICITLY says they want to change them.
 
 Field-specific rules:
-- location: The city or area. Match to AVAILABLE_LOCATIONS if provided. Use null if not mentioned.
+- location: The city or area. You MUST match the customer's input to an entry from the AVAILABLE_LOCATIONS list. Use the EXACT string from the list. Neighborhoods, districts, and abbreviations should map to a matching entry (e.g. "shibuya" → "Shibuya, Tokyo", "soho" → "Soho, London", "gangnam" → "Gangnam, Seoul", "san diego" → "San Diego, CA"). If the customer's location genuinely does not exist in the list, output their exact input unchanged — the system will handle it. Use null if not mentioned.
 - date: YYYY-MM-DD format. Year defaults to 2026 if not stated. "tonight" = today's date, "tomorrow" = tomorrow. Use null if not mentioned.
 - time: 24-hour format "HH:MM". "7pm"="19:00", "noon"="12:00", "dinner"=null (too vague). Use null if not mentioned.
 - partySize: Integer. "table for 4"=4, "two of us"=2, "myself"=1. Use null if never mentioned.
