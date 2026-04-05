@@ -77,35 +77,11 @@ async function handleCollectingPreferences(
   _customerMessage: string
 ): Promise<WorkflowResult> {
   const convo = recentConversation(booking.id);
-  const customerTexts = store.getMessages(booking.id)
-    .filter((m) => m.role === "customer")
-    .map((m) => m.content)
-    .join(" ")
-    .toLowerCase();
 
-  // LLM extraction
+  // LLM extraction (Gemini + schema constraints handle hallucination prevention)
   const prefs = await extractPreferences(convo);
 
-  // ── Post-extraction validation ──
-  // Catch hallucinations: if the customer never mentioned dates/budget/etc.,
-  // force those fields back to null even if the LLM fabricated values.
-  const dateWords = /\b(\d{1,2}[\/\-]\d{1,2}|\d{4}[\/\-]\d{2}|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|monday|tuesday|wednesday|thursday|friday|saturday|sunday|tomorrow|next\s+week|tonight|this\s+weekend|\d{1,2}(?:st|nd|rd|th))\b/i;
-  if (!dateWords.test(customerTexts)) {
-    if (prefs.checkIn) { console.log("[validation] Nullifying hallucinated checkIn:", prefs.checkIn); prefs.checkIn = null; }
-    if (prefs.checkOut) { console.log("[validation] Nullifying hallucinated checkOut:", prefs.checkOut); prefs.checkOut = null; }
-  }
-
-  const budgetWords = /(\$|dollar|budget|price|cost|cheap|expensive|afford|per\s*night|under\s*\d|max\s*\d|less\s*than|\d+\s*(?:a|per)\s*night)/i;
-  if (!budgetWords.test(customerTexts)) {
-    if (prefs.maxBudget) { console.log("[validation] Nullifying hallucinated maxBudget:", prefs.maxBudget); prefs.maxBudget = null; }
-  }
-
-  const guestWords = /(\d+\s*(?:guest|people|person|pax|traveller|adult|kid|child)|(?:myself|alone|solo|couple|family|group))/i;
-  if (!guestWords.test(customerTexts)) {
-    if (prefs.guestCount) { console.log("[validation] Nullifying hallucinated guestCount:", prefs.guestCount); prefs.guestCount = null; }
-  }
-
-  // Merge validated extraction into booking (only non-null, non-already-set fields)
+  // Merge extraction into booking (only non-null fields)
   const travelUpdates: Record<string, unknown> = {};
   if (prefs.destination) travelUpdates.destination = prefs.destination;
   if (prefs.checkIn) travelUpdates.checkIn = prefs.checkIn;
@@ -137,15 +113,15 @@ async function handleCollectingPreferences(
   }
 
   // ── Determine what's known vs missing ──
-  // Use the CUMULATIVE booking state, not just this extraction round.
-  // This ensures incremental info ("UK" then "$300") accumulates correctly.
+  // Use the CUMULATIVE booking state (not just this extraction round).
+  // Defaults are empty/zero, so simple truthiness distinguishes "set" from "unset".
   const updated = store.getBooking(booking.id)!;
   const knownFields: Record<string, string | number | null> = {
     destination: updated.travel.destination || null,
     checkIn: updated.travel.checkIn || null,
     checkOut: updated.travel.checkOut || null,
-    guestCount: updated.travel.guestCount > 1 || prefs.guestCount ? updated.travel.guestCount : null,
-    roomType: updated.preferences.roomType !== "standard" || prefs.roomType ? updated.preferences.roomType : null,
+    guestCount: updated.travel.guestCount > 0 ? updated.travel.guestCount : null,
+    roomType: updated.preferences.roomType || null,
     maxBudget: updated.preferences.maxBudgetPerNight > 0 ? updated.preferences.maxBudgetPerNight : null,
   };
   const requiredMissing = REQUIRED_PREF_FIELDS.filter((f) => knownFields[f] === null || knownFields[f] === undefined);

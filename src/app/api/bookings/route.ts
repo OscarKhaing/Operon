@@ -27,12 +27,12 @@ export async function POST(req: Request) {
     travel: {
       checkIn: body.travel?.checkIn || "",
       checkOut: body.travel?.checkOut || "",
-      guestCount: body.travel?.guestCount || 1,
+      guestCount: body.travel?.guestCount || 0,
       roomCount: body.travel?.roomCount || 1,
       destination: body.travel?.destination || "",
     },
     preferences: {
-      roomType: body.preferences?.roomType || "standard",
+      roomType: body.preferences?.roomType || "",
       maxBudgetPerNight: body.preferences?.maxBudgetPerNight || 0,
       currency: body.preferences?.currency || "USD",
       specialRequests: body.preferences?.specialRequests || "",
