@@ -63,4 +63,19 @@ router.get('/', async (req: Request, res: Response) => {
   }
 });
 
+// GET Unique Locations for the search dropdown/filters
+router.get('/locations', async (req: Request, res: Response) => {
+  try {
+    // .distinct('location') returns an array of unique strings
+    const locations = await Hotel.distinct('location');
+    
+    // Optional: Sort them alphabetically
+    locations.sort((a, b) => a.localeCompare(b));
+
+    res.json(locations);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;
