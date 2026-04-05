@@ -492,6 +492,15 @@ ${missingFields.length === 0
   return generateText(prompt, CHECKLIST_CHAT_SYSTEM, 0.5);
 }
 
+// ─── Cancel intent detection (regex-only, no LLM call) ─────────────────────
+
+const CANCEL_PATTERN =
+  /\b(cancel\s*(my\s*)?(booking|reservation|trip|order)?|nevermind|never\s*mind|forget\s*it|changed?\s*my\s*mind|stop\s*(the\s*)?(booking|reservation)|call\s*it\s*off|i\s*(don'?t|do\s*not)\s*want\s*(it|this|the\s*booking)\s*(anymore)?)\b/i;
+
+export function detectCancelIntent(message: string): { intent: "cancel" | "none" } {
+  return { intent: CANCEL_PATTERN.test(message) ? "cancel" : "none" };
+}
+
 // ─── Health check ───────────────────────────────────────────────────────────
 
 export async function healthCheck(): Promise<{ ok: boolean; provider: string; model: string; error?: string }> {

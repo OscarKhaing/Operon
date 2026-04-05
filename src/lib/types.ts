@@ -46,6 +46,7 @@ export interface BookingRequest {
   instagramSenderId?: string;
   pdfUrl?: string; // URL to generated reservation PDF
   rejectedOptionIds?: string[]; // options rejected by hotels (no availability)
+  cancelRequested?: boolean; // true when customer expressed cancel intent, awaiting confirmation
   createdAt: string;
   updatedAt: string;
 }

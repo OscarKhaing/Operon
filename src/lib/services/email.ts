@@ -118,6 +118,106 @@ function buildReservationHtml(input: ReservationEmailInput): string {
 </div>`.trim();
 }
 
+// ─── Cancellation email ─────────────────────────────────────────────────────
+
+export interface CancellationEmailInput {
+  hotelEmail: string;
+  hotelName: string;
+  guestName: string;
+  roomType: string;
+  checkIn: string;
+  checkOut: string;
+  confirmationCode?: string | null;
+  bookingId: string;
+}
+
+function buildCancellationHtml(input: CancellationEmailInput): string {
+  return `
+<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; color: #1a1a2e;">
+  <div style="background: #c2410c; color: white; padding: 24px 32px; border-radius: 12px 12px 0 0;">
+    <h1 style="margin: 0; font-size: 20px; font-weight: 600;">Reservation Cancellation</h1>
+    <p style="margin: 4px 0 0; opacity: 0.7; font-size: 14px;">Operon Booking System</p>
+  </div>
+
+  <div style="background: white; border: 1px solid #e5e7eb; border-top: none; padding: 32px; border-radius: 0 0 12px 12px;">
+    <p style="margin: 0 0 24px; font-size: 15px;">
+      Dear <strong>${input.hotelName}</strong> Reservations Team,
+    </p>
+    <p style="margin: 0 0 24px; font-size: 15px;">
+      We regret to inform you that the following reservation has been cancelled:
+    </p>
+
+    <table style="width: 100%; border-collapse: collapse; font-size: 14px; margin-bottom: 24px;">
+      <tr style="border-bottom: 1px solid #f3f4f6;">
+        <td style="padding: 10px 0; color: #6b7280; width: 160px;">Guest Name</td>
+        <td style="padding: 10px 0; font-weight: 600;">${input.guestName}</td>
+      </tr>
+      <tr style="border-bottom: 1px solid #f3f4f6;">
+        <td style="padding: 10px 0; color: #6b7280;">Room Type</td>
+        <td style="padding: 10px 0; font-weight: 600;">${input.roomType}</td>
+      </tr>
+      <tr style="border-bottom: 1px solid #f3f4f6;">
+        <td style="padding: 10px 0; color: #6b7280;">Check-in</td>
+        <td style="padding: 10px 0; font-weight: 600;">${input.checkIn}</td>
+      </tr>
+      <tr style="border-bottom: 1px solid #f3f4f6;">
+        <td style="padding: 10px 0; color: #6b7280;">Check-out</td>
+        <td style="padding: 10px 0; font-weight: 600;">${input.checkOut}</td>
+      </tr>
+      ${input.confirmationCode ? `
+      <tr style="border-bottom: 1px solid #f3f4f6;">
+        <td style="padding: 10px 0; color: #6b7280;">Confirmation Code</td>
+        <td style="padding: 10px 0; font-weight: 600;">${input.confirmationCode}</td>
+      </tr>` : ""}
+    </table>
+
+    <p style="margin: 0 0 8px; font-size: 15px;">
+      Please release this reservation at your earliest convenience.
+    </p>
+    <p style="margin: 0; font-size: 14px; color: #6b7280;">
+      Thank you,<br/>
+      Operon Booking Operations
+    </p>
+  </div>
+
+  <p style="text-align: center; font-size: 12px; color: #9ca3af; margin-top: 16px;">
+    This is an automated cancellation notice sent by Operon.
+  </p>
+</div>`.trim();
+}
+
+export async function sendCancellationEmail(input: CancellationEmailInput): Promise<EmailResult> {
+  const timestamp = new Date().toISOString();
+  const subject = `Cancellation Notice — ${input.guestName} — ${input.checkIn} to ${input.checkOut}`;
+
+  try {
+    const recipient = TEST_RECIPIENT || input.hotelEmail;
+
+    const { data, error } = await resend.emails.send({
+      from: FROM,
+      to: recipient,
+      subject: TEST_RECIPIENT
+        ? `[TEST → ${input.hotelEmail}] ${subject}`
+        : subject,
+      html: buildCancellationHtml(input),
+    });
+
+    if (error) {
+      console.error("Resend cancellation error:", error);
+      return { success: false, emailId: null, sentTo: input.hotelEmail, error: error.message, timestamp };
+    }
+
+    console.log(`Cancellation email sent via Resend: ${data?.id} → ${recipient}`);
+    return { success: true, emailId: data?.id ?? null, sentTo: input.hotelEmail, error: null, timestamp };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("Resend cancellation send failed:", message);
+    return { success: false, emailId: null, sentTo: input.hotelEmail, error: message, timestamp };
+  }
+}
+
+// ─── Reservation email ──────────────────────────────────────────────────────
+
 /**
  * Send the reservation email to the hotel via Resend.
  */

@@ -17,9 +17,10 @@ import {
   parseSelection,
   extractPersonalInfo,
   generateChecklistReply,
+  detectCancelIntent,
 } from "./llm";
 import { generateDummyPdf } from "./pdf-dummy";
-import { sendReservationEmail } from "./email";
+import { sendReservationEmail, sendCancellationEmail } from "./email";
 import { simulateHotelResponse } from "./hotel-response";
 import { fetchHotelById } from "./hotel-api";
 import { v4 as uuid } from "uuid";
@@ -460,6 +461,127 @@ async function handleSentToHotel(
   );
 }
 
+// ─── Cancellation flow ──────────────────────────────────────────────���───────
+
+const CANCELABLE_STATES: string[] = [
+  "intake", "extracting", "matching", "options_presented",
+  "selected", "collecting_info", "filling_template", "sent_to_hotel",
+];
+
+const YES_PATTERN = /\b(yes|yeah|yep|sure|confirm|go\s*ahead|do\s*it|cancel\s*it|proceed)\b/i;
+const NO_PATTERN = /\b(no|nah|nope|wait|don'?t|keep|continue|go\s*back|stop)\b/i;
+
+/**
+ * Shared cancellation service — used by both customer chat flow and operator API.
+ */
+export async function cancelBooking(
+  bookingId: string,
+  reason: string,
+  opts: { force?: boolean; sendEmail?: boolean; source: "customer" | "operator" },
+): Promise<{ success: boolean; error?: string }> {
+  const booking = store.getBooking(bookingId);
+  if (!booking) return { success: false, error: "Booking not found" };
+  if (booking.status === "cancelled") return { success: false, error: "Booking is already cancelled" };
+  if (booking.status === "confirmed" && !opts.force) {
+    return { success: false, error: "Booking is confirmed. Pass force to cancel." };
+  }
+
+  // Cancel any active transaction
+  const tx = store.getLatestTransaction(bookingId);
+  if (tx && tx.status === "sent") {
+    store.updateTransaction(tx.id, { status: "rejected" });
+  }
+
+  // Send cancellation email to hotel if reservation was dispatched
+  if (opts.sendEmail && ["sent_to_hotel", "confirmed"].includes(booking.status)) {
+    const selectedOption = tx ? store.getOptions(bookingId).find((o) => o.id === tx.selectedOptionId) : null;
+    const hotel = selectedOption ? await fetchHotelById(selectedOption.hotelId) : null;
+
+    if (hotel && selectedOption) {
+      const emailResult = await sendCancellationEmail({
+        hotelEmail: hotel.contactEmail,
+        hotelName: hotel.name,
+        guestName: booking.customer.name,
+        roomType: selectedOption.roomType.name,
+        checkIn: booking.travel.checkIn,
+        checkOut: booking.travel.checkOut,
+        confirmationCode: tx?.confirmationCode,
+        bookingId,
+      });
+
+      addMsg(
+        bookingId,
+        "system",
+        emailResult.success
+          ? `Cancellation email sent to ${emailResult.sentTo} (ID: ${emailResult.emailId})`
+          : `Cancellation email to ${emailResult.sentTo} failed: ${emailResult.error}`,
+      );
+    }
+  }
+
+  store.updateBooking(bookingId, { status: "cancelled", cancelRequested: false });
+  addMsg(bookingId, "system", `Booking cancelled. Reason: ${reason}. Source: ${opts.source}`);
+
+  return { success: true };
+}
+
+function enterCancelConfirmation(booking: BookingRequest): WorkflowResult {
+  store.updateBooking(booking.id, { cancelRequested: true });
+
+  if (booking.status === "sent_to_hotel") {
+    const tx = store.getLatestTransaction(booking.id);
+    const option = tx ? store.getOptions(booking.id).find((o) => o.id === tx.selectedOptionId) : null;
+    const hotelName = option?.hotelName || "the hotel";
+    return text(
+      `Are you sure you'd like to cancel? A reservation request has already been sent to **${hotelName}**. I'll need to notify them of the cancellation.\n\nPlease reply **yes** or **no**.`
+    );
+  }
+
+  if (booking.status === "confirmed") {
+    const tx = store.getLatestTransaction(booking.id);
+    const code = tx?.confirmationCode || "N/A";
+    return text(
+      `This booking is already confirmed with code **${code}**. Cancelling at this stage may have implications.\n\nAre you sure you want to cancel? Please reply **yes** or **no**.`
+    );
+  }
+
+  // Pre-dispatch states
+  return text(
+    "Are you sure you'd like to cancel this booking? No reservation has been sent yet, so there's nothing to undo.\n\nPlease reply **yes** or **no**."
+  );
+}
+
+async function handleCancelConfirmation(
+  booking: BookingRequest,
+  customerMessage: string,
+): Promise<WorkflowResult> {
+  if (YES_PATTERN.test(customerMessage)) {
+    const postDispatch = ["sent_to_hotel", "confirmed"].includes(booking.status);
+    const result = await cancelBooking(booking.id, "Cancelled by customer", {
+      force: booking.status === "confirmed",
+      sendEmail: postDispatch,
+      source: "customer",
+    });
+
+    if (!result.success) {
+      store.updateBooking(booking.id, { cancelRequested: false });
+      return text(`I couldn't cancel the booking: ${result.error}. Let's continue where we left off.`);
+    }
+
+    return postDispatch
+      ? text("Your booking has been cancelled and the hotel has been notified. If you change your mind, feel free to start a new booking anytime!")
+      : text("Your booking has been cancelled. If you change your mind, feel free to start a new booking anytime!");
+  }
+
+  if (NO_PATTERN.test(customerMessage)) {
+    store.updateBooking(booking.id, { cancelRequested: false });
+    return text("Okay, let's continue where we left off! What would you like to do?");
+  }
+
+  // Ambiguous
+  return text("I want to make sure — would you like to cancel this booking? Please reply **yes** or **no**.");
+}
+
 // ─── Main entry point ───────────────────────────────────────────────────────
 
 export async function processMessage(
@@ -470,10 +592,23 @@ export async function processMessage(
   const booking = store.getBooking(bookingId);
   if (!booking) return text("Booking not found.");
 
+  // ── Cancel confirmation pending — handle yes/no before anything else ──
+  if (booking.cancelRequested) {
+    return handleCancelConfirmation(booking, customerMessage);
+  }
+
   // ── Direct option selection from web UI click ──
   // Bypasses LLM entirely — deterministic, instant.
   if (metadata?.type === "option_selected") {
     return selectOption(bookingId, metadata.optionIndex);
+  }
+
+  // ── Pre-routing cancel intent detection (regex, no LLM call) ──
+  if (CANCELABLE_STATES.includes(booking.status)) {
+    const cancelCheck = detectCancelIntent(customerMessage);
+    if (cancelCheck.intent === "cancel") {
+      return enterCancelConfirmation(booking);
+    }
   }
 
   // ── Route based on current workflow state ──
