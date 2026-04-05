@@ -4,7 +4,6 @@
  */
 import {
   BookingRequest,
-  HotelRecord,
   TemplateRecord,
   ChatMessage,
   BookingOption,
@@ -12,7 +11,6 @@ import {
 } from "./types";
 import {
   MOCK_BOOKINGS,
-  MOCK_HOTELS,
   MOCK_TEMPLATES,
   MOCK_MESSAGES,
   MOCK_OPTIONS,
@@ -26,7 +24,6 @@ function clone<T>(data: T): T {
 
 class Store {
   bookings: BookingRequest[] = clone(MOCK_BOOKINGS);
-  hotels: HotelRecord[] = clone(MOCK_HOTELS);
   templates: TemplateRecord[] = clone(MOCK_TEMPLATES);
   messages: ChatMessage[] = clone(MOCK_MESSAGES);
   options: BookingOption[] = clone(MOCK_OPTIONS);
@@ -51,15 +48,6 @@ class Store {
     if (idx === -1) return undefined;
     this.bookings[idx] = { ...this.bookings[idx], ...updates, updatedAt: new Date().toISOString() };
     return this.bookings[idx];
-  }
-
-  // ----- Hotels -----
-  getHotels(): HotelRecord[] {
-    return this.hotels;
-  }
-
-  getHotel(id: string): HotelRecord | undefined {
-    return this.hotels.find((h) => h.id === id);
   }
 
   // ----- Templates -----

@@ -21,6 +21,7 @@ import {
 import { generateDummyPdf } from "./pdf-dummy";
 import { sendReservationEmail } from "./email";
 import { simulateHotelResponse } from "./hotel-response";
+import { fetchHotelById } from "./hotel-api";
 import { v4 as uuid } from "uuid";
 
 /**
@@ -73,11 +74,35 @@ async function handleCollectingPreferences(
   _customerMessage: string
 ): Promise<WorkflowResult> {
   const convo = recentConversation(booking.id);
+  const customerTexts = store.getMessages(booking.id)
+    .filter((m) => m.role === "customer")
+    .map((m) => m.content)
+    .join(" ")
+    .toLowerCase();
 
   // LLM extraction
   const prefs = await extractPreferences(convo);
 
-  // Merge into booking
+  // ── Post-extraction validation ──
+  // Catch hallucinations: if the customer never mentioned dates/budget/etc.,
+  // force those fields back to null even if the LLM fabricated values.
+  const dateWords = /\b(\d{1,2}[\/\-]\d{1,2}|\d{4}[\/\-]\d{2}|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|monday|tuesday|wednesday|thursday|friday|saturday|sunday|tomorrow|next\s+week|tonight|this\s+weekend|\d{1,2}(?:st|nd|rd|th))\b/i;
+  if (!dateWords.test(customerTexts)) {
+    if (prefs.checkIn) { console.log("[validation] Nullifying hallucinated checkIn:", prefs.checkIn); prefs.checkIn = null; }
+    if (prefs.checkOut) { console.log("[validation] Nullifying hallucinated checkOut:", prefs.checkOut); prefs.checkOut = null; }
+  }
+
+  const budgetWords = /(\$|dollar|budget|price|cost|cheap|expensive|afford|per\s*night|under\s*\d|max\s*\d|less\s*than|\d+\s*(?:a|per)\s*night)/i;
+  if (!budgetWords.test(customerTexts)) {
+    if (prefs.maxBudget) { console.log("[validation] Nullifying hallucinated maxBudget:", prefs.maxBudget); prefs.maxBudget = null; }
+  }
+
+  const guestWords = /(\d+\s*(?:guest|people|person|pax|traveller|adult|kid|child)|(?:myself|alone|solo|couple|family|group))/i;
+  if (!guestWords.test(customerTexts)) {
+    if (prefs.guestCount) { console.log("[validation] Nullifying hallucinated guestCount:", prefs.guestCount); prefs.guestCount = null; }
+  }
+
+  // Merge validated extraction into booking (only non-null, non-already-set fields)
   const travelUpdates: Record<string, unknown> = {};
   if (prefs.destination) travelUpdates.destination = prefs.destination;
   if (prefs.checkIn) travelUpdates.checkIn = prefs.checkIn;
@@ -108,14 +133,17 @@ async function handleCollectingPreferences(
     addMsg(booking.id, "system", `Extracted preferences: ${extracted}`);
   }
 
-  // Check what's missing
+  // ── Determine what's known vs missing ──
+  // Use the CUMULATIVE booking state, not just this extraction round.
+  // This ensures incremental info ("UK" then "$300") accumulates correctly.
+  const updated = store.getBooking(booking.id)!;
   const knownFields: Record<string, string | number | null> = {
-    destination: prefs.destination,
-    checkIn: prefs.checkIn,
-    checkOut: prefs.checkOut,
-    guestCount: prefs.guestCount,
-    roomType: prefs.roomType,
-    maxBudget: prefs.maxBudget,
+    destination: updated.travel.destination || null,
+    checkIn: updated.travel.checkIn || null,
+    checkOut: updated.travel.checkOut || null,
+    guestCount: updated.travel.guestCount > 1 || prefs.guestCount ? updated.travel.guestCount : null,
+    roomType: updated.preferences.roomType !== "standard" || prefs.roomType ? updated.preferences.roomType : null,
+    maxBudget: updated.preferences.maxBudgetPerNight > 0 ? updated.preferences.maxBudgetPerNight : null,
   };
   const missing = PREF_FIELDS.filter((f) => knownFields[f] === null || knownFields[f] === undefined);
 
@@ -135,7 +163,7 @@ async function handleCollectingPreferences(
 
 async function handleMatching(bookingId: string): Promise<WorkflowResult> {
   const booking = store.getBooking(bookingId)!;
-  const options = findOptions(booking);
+  const { options, hotelMap } = await findOptions(booking);
   store.addOptions(options);
 
   if (options.length === 0) {
@@ -157,7 +185,7 @@ async function handleMatching(bookingId: string): Promise<WorkflowResult> {
     pricePerNight: o.roomType.basePrice,
     totalPrice: o.totalPrice,
     nights: o.nightCount,
-    stars: store.getHotel(o.hotelId)?.stars || 4,
+    stars: hotelMap.get(o.hotelId)?.stars || hotelMap.get(o.hotelName)?.stars || 4,
     amenities: o.roomType.amenities,
     score: o.score,
     explanation: o.explanation,
@@ -323,7 +351,7 @@ async function handleCollectingInfo(
 
 async function triggerDispatch(bookingId: string, option: BookingOption): Promise<WorkflowResult> {
   const booking = store.getBooking(bookingId)!;
-  const hotel = store.getHotel(option.hotelId);
+  const hotel = await fetchHotelById(option.hotelId);
   const hotelEmail = hotel?.contactEmail || "hotel@example.com";
 
   // 1. Generate dummy PDF (replace with real PDF generation later)

@@ -1,9 +1,9 @@
 /**
  * Hotel matching and ranking engine.
- * Filters hotels by constraints, ranks by price/location/preference fit.
+ * Fetches hotels from MongoDB via the hotel API, then scores and ranks options.
  */
 import { BookingRequest, HotelRecord, BookingOption, RoomType } from "../types";
-import { store } from "../store";
+import { fetchHotels } from "./hotel-api";
 import { v4 as uuid } from "uuid";
 
 interface MatchCriteria {
@@ -33,7 +33,7 @@ function scoreOption(
   if (room.basePrice <= criteria.maxBudgetPerNight) {
     const savings = criteria.maxBudgetPerNight - room.basePrice;
     const savingsRatio = savings / criteria.maxBudgetPerNight;
-    score += Math.round(savingsRatio * 25); // up to 25 points for value
+    score += Math.round(savingsRatio * 25);
     reasons.push(`$${room.basePrice}/night is within your $${criteria.maxBudgetPerNight} budget`);
   } else {
     const overageRatio = (room.basePrice - criteria.maxBudgetPerNight) / criteria.maxBudgetPerNight;
@@ -67,8 +67,16 @@ function scoreOption(
   return { score, explanation: reasons.join(". ") + "." };
 }
 
-export function findOptions(booking: BookingRequest): BookingOption[] {
-  const hotels = store.getHotels();
+export interface MatchResult {
+  options: BookingOption[];
+  hotelMap: Map<string, HotelRecord>;
+}
+
+/**
+ * Find and rank hotel options for a booking.
+ * Fetches from MongoDB with pre-filters, then scores locally.
+ */
+export async function findOptions(booking: BookingRequest): Promise<MatchResult> {
   const nights = nightsBetween(booking.travel.checkIn, booking.travel.checkOut);
 
   const criteria: MatchCriteria = {
@@ -80,18 +88,30 @@ export function findOptions(booking: BookingRequest): BookingOption[] {
     checkOut: booking.travel.checkOut,
   };
 
-  // Filter hotels by destination city
-  const cityHotels = hotels.filter(
-    (h) => h.city.toLowerCase() === criteria.destination.toLowerCase()
-  );
+  // Fetch from MongoDB — only pass filters the user actually provided.
+  // Empty strings and zero values mean "not specified" and should not constrain the query.
+  const fetchParams: Parameters<typeof fetchHotels>[0] = {};
+  if (criteria.destination) fetchParams.location = criteria.destination;
+  if (criteria.maxBudgetPerNight > 0) fetchParams.maxPrice = Math.round(criteria.maxBudgetPerNight * 1.5);
+  if (criteria.checkIn) fetchParams.checkIn = criteria.checkIn;
+  if (criteria.checkOut) fetchParams.checkOut = criteria.checkOut;
+
+  const hotels = await fetchHotels(fetchParams);
+
+  // Build hotel lookup map for callers (stars, contactEmail, etc.)
+  const hotelMap = new Map<string, HotelRecord>();
+  for (const hotel of hotels) {
+    hotelMap.set(hotel.id, hotel);
+    // Also index by name for lookup flexibility
+    hotelMap.set(hotel.name, hotel);
+  }
 
   const options: BookingOption[] = [];
 
-  for (const hotel of cityHotels) {
+  for (const hotel of hotels) {
     for (const room of hotel.roomTypes) {
       const { score, explanation } = scoreOption(hotel, room, criteria);
 
-      // Only include options that score above threshold or are close to budget
       if (score >= 30) {
         options.push({
           id: uuid(),
@@ -111,5 +131,5 @@ export function findOptions(booking: BookingRequest): BookingOption[] {
   // Sort by score descending
   options.sort((a, b) => b.score - a.score);
 
-  return options;
+  return { options, hotelMap };
 }

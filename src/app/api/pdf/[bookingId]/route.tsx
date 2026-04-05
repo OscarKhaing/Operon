@@ -2,6 +2,7 @@ import { renderToBuffer } from "@react-pdf/renderer";
 import { store } from "@/lib/store";
 import { ReservationDocument } from "@/lib/pdf/reservation-template";
 import { PdfInput } from "@/lib/services/pdf-dummy";
+import { fetchHotelById } from "@/lib/services/hotel-api";
 import React from "react";
 
 export async function GET(
@@ -27,7 +28,7 @@ export async function GET(
     });
   }
 
-  const hotel = store.getHotel(option.hotelId);
+  const hotel = await fetchHotelById(option.hotelId);
 
   const pdfInput: PdfInput = {
     bookingId: booking.id,

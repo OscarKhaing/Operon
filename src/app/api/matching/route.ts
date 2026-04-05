@@ -13,7 +13,7 @@ export async function POST(req: Request) {
   // Clear previous options before re-matching
   store.clearOptions(bookingId);
 
-  const options = findOptions(booking);
+  const { options } = await findOptions(booking);
   store.addOptions(options);
 
   if (options.length > 0) {

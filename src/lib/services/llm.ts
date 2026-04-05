@@ -64,33 +64,42 @@ interface PreferencesExtraction {
   maxBudget: number | null;
 }
 
-const PREFERENCES_SYSTEM = `You are a data extraction assistant for a travel booking agency. Your ONLY job is to extract booking preferences from a customer conversation.
+const PREFERENCES_SYSTEM = `You are a data extraction assistant for a travel booking agency.
+Your ONLY job is to extract booking preferences that the CUSTOMER EXPLICITLY STATED in the conversation.
 
-Available destinations in our hotel pool: Singapore, Tokyo, Shanghai, Phuket, Seoul, Ho Chi Minh City.
-Available room types: standard, deluxe, suite.
+CRITICAL RULES:
+- Output ONLY a valid JSON object. No explanation, no text before or after.
+- You MUST use null for ANY field the customer has NOT explicitly mentioned. This is the most important rule.
+- NEVER invent, guess, or assume values. If the customer said "UK" and nothing else, every field except destination must be null.
+- Look at the ENTIRE conversation to combine info from multiple messages (e.g., "UK" in one message and "$300" in the next).
 
-Rules:
-- Output ONLY a JSON object, nothing else. No explanation.
-- Use null for any field not mentioned at all.
-- Dates must be YYYY-MM-DD format. If the year is not stated, assume 2026.
-- For guestCount, extract the number of people/guests/persons. "2 guests", "two people", "for 2", "myself" (=1) all count. Only use null if truly never mentioned.
-- For maxBudget, extract the per-night number only. Output as integer.
-- For roomType, normalize to one of: standard, deluxe, suite.
-- For destination, normalize to the exact city name from the list above.`;
+Field-specific rules:
+- destination: Extract the place name exactly as stated. Can be a country ("UK"), city ("London"), or region ("Southeast Asia"). Use null if no location mentioned.
+- checkIn: YYYY-MM-DD format. Year defaults to 2026 if not stated. Use null if no arrival/check-in date mentioned.
+- checkOut: YYYY-MM-DD format. Year defaults to 2026 if not stated. Use null if no departure/check-out date mentioned.
+- guestCount: Integer. "2 guests", "two people", "for 2", "myself"=1. Use null if never mentioned.
+- roomType: One of: standard, deluxe, suite. Use null if no room preference stated.
+- maxBudget: Per-night budget as integer. Extract the NUMBER the customer mentioned as their limit. "$300/night"=300, "under 200"=200, "300 dollars"=300, "budget around 150"=150, "budget-friendly"=null (no number). Use null ONLY if no number is mentioned.
+
+Examples of correct extraction:
+- Customer says "I want to visit UK" → {"destination":"UK","checkIn":null,"checkOut":null,"guestCount":null,"roomType":null,"maxBudget":null}
+- Customer says "Tokyo, May 10 to 14, 2 guests" → {"destination":"Tokyo","checkIn":"2026-05-10","checkOut":"2026-05-14","guestCount":2,"roomType":null,"maxBudget":null}
+- Customer says "under $300 per night, deluxe" → {"destination":null,"checkIn":null,"checkOut":null,"guestCount":null,"roomType":"deluxe","maxBudget":300}
+- Two messages: first "UK", then "under 300 dollars" → {"destination":"UK","checkIn":null,"checkOut":null,"guestCount":null,"roomType":null,"maxBudget":300}`;
 
 export async function extractPreferences(conversationText: string): Promise<PreferencesExtraction> {
-  const prompt = `Extract booking preferences from this conversation:
+  const prompt = `Extract ONLY what the customer explicitly stated from this conversation. Use null for anything not mentioned.
 
 """
 ${conversationText}
 """
 
-Output JSON with keys: destination, checkIn, checkOut, guestCount, roomType, maxBudget`;
+JSON with keys: destination, checkIn, checkOut, guestCount, roomType, maxBudget`;
 
   const raw = await generate(prompt, PREFERENCES_SYSTEM, 0.1);
   const parsed = parseJSON<PreferencesExtraction>(raw);
 
-  return parsed || {
+  const result = parsed || {
     destination: null,
     checkIn: null,
     checkOut: null,
@@ -98,22 +107,46 @@ Output JSON with keys: destination, checkIn, checkOut, guestCount, roomType, max
     roomType: null,
     maxBudget: null,
   };
+
+  // ── Regex safety net for small models ──
+  // The 3B model sometimes misses budget/guest numbers in multi-turn conversations.
+  // Run lightweight regex over customer messages to catch what LLM missed.
+  const customerOnly = conversationText
+    .split("\n")
+    .filter((l) => l.startsWith("customer:"))
+    .map((l) => l.replace(/^customer:\s*/, ""))
+    .join(" ");
+
+  if (result.maxBudget === null) {
+    const budgetMatch = customerOnly.match(/(?:under|below|max|up\s*to|less\s*than|around|about|budget)?\s*\$?\s*(\d{2,5})\s*(?:dollar|usd|per\s*night|\/\s*night|a\s*night)?/i)
+      || customerOnly.match(/(\d{2,5})\s*(?:dollar|usd)/i);
+    if (budgetMatch) result.maxBudget = parseInt(budgetMatch[1]);
+  }
+
+  if (result.guestCount === null) {
+    const guestMatch = customerOnly.match(/(\d+)\s*(?:guest|people|person|pax|of\s+us)/i)
+      || customerOnly.match(/\b(myself|alone|solo)\b/i);
+    if (guestMatch) result.guestCount = guestMatch[1].match(/myself|alone|solo/) ? 1 : parseInt(guestMatch[1]);
+  }
+
+  return result;
 }
 
 // ─── PROMPT 2: Generate a conversational reply during preference collection ──
 
 const PREFERENCE_CHAT_SYSTEM = `You are a friendly travel booking assistant for a travel agency.
-Your job is to help customers find a hotel. You are chatting with them to collect their booking preferences.
+Your job is to help customers find a hotel by collecting their booking preferences one step at a time.
 
-You need to collect: destination, check-in date, check-out date, number of guests, room type preference, and budget per night.
+You need to eventually collect: destination, check-in date, check-out date, number of guests, room type preference (Standard/Deluxe/Suite), and budget per night.
 
 Rules:
 - Be warm, brief, and professional. 1-3 sentences max.
-- Ask for missing info naturally — don't list all missing fields robotically.
-- If the customer gave some info, acknowledge it before asking for more.
-- Never make up information. Never confirm a booking.
-- Available destinations: Singapore, Tokyo, Shanghai, Phuket, Seoul, Ho Chi Minh City.
-- Available room types: Standard, Deluxe, Suite.`;
+- Ask for ONE or TWO missing items at a time — don't overwhelm with a long list.
+- If only destination is known, acknowledge it and ask about travel dates next.
+- If dates are known, ask about number of guests and budget.
+- Never make up or assume information the customer hasn't provided.
+- Never confirm a booking or present options — just collect info.
+- If few items are missing, you can ask for them together.`;
 
 export async function generatePreferenceReply(
   conversationHistory: string,

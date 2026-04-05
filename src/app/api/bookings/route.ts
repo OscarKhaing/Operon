@@ -29,7 +29,7 @@ export async function POST(req: Request) {
     },
     preferences: {
       roomType: body.preferences?.roomType || "standard",
-      maxBudgetPerNight: body.preferences?.maxBudgetPerNight || 200,
+      maxBudgetPerNight: body.preferences?.maxBudgetPerNight || 0,
       currency: body.preferences?.currency || "USD",
       specialRequests: body.preferences?.specialRequests || "",
     },
