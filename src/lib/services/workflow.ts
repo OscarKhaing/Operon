@@ -39,12 +39,10 @@ import {
 } from "./email";
 import { simulateHotelResponse, simulateFlightResponse, simulateRestaurantResponse } from "./hotel-response";
 import { fetchHotelById, fetchHotels, fetchAvailableLocations } from "./hotel-api";
-<<<<<<< HEAD
 import { createCheckoutSession } from "./stripe";
-=======
 import { fetchFlights, fetchAvailableRoutes } from "./flight-api";
 import { fetchRestaurants, fetchAvailableRestaurantLocations } from "./restaurant-api";
->>>>>>> e5fd37432bdb6d529ecfcdb711c00266fd2bc936
+
 import { v4 as uuid } from "uuid";
 
 /**
@@ -658,10 +656,7 @@ async function handleCollectingInfo(
     // All personal info collected! → create payment session
     addMsg(booking.id, "system", "All personal info collected. Creating payment link...");
 
-<<<<<<< HEAD
-=======
     // Trigger dispatch
->>>>>>> e5fd37432bdb6d529ecfcdb711c00266fd2bc936
     const options = store.getOptions(booking.id);
     const selectedOption = booking.selectedOptionId
       ? options.find((option) => option.id === booking.selectedOptionId)

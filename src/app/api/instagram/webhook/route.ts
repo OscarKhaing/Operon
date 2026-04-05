@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { v4 as uuid } from "uuid";
 import { store } from "@/lib/store";
-import { ChatMessage, MessageMetadata, HotelOptionCard, BookingRequest } from "@/lib/types";
+import { ChatMessage, MessageMetadata, HotelOptionCard, FlightOptionCard, BookingRequest } from "@/lib/types";
 import { processMessage } from "@/lib/services/workflow";
 import {
   sendInstagramText,
@@ -210,6 +210,13 @@ async function sendInstagramResponse(
     return;
   }
 
+  if (metadata?.type === "flight_options") {
+    await sendInstagramText(recipientId, content);
+    const elements = buildFlightOptionElements(metadata.options);
+    await sendInstagramTemplate(recipientId, elements);
+    return;
+  }
+
   await sendInstagramText(recipientId, content);
 }
 
@@ -218,7 +225,6 @@ function buildOptionElements(options: HotelOptionCard[]): InstagramTemplateEleme
     const optionIndex = idx + 1;
     const title = `${opt.hotelName} - ${opt.roomType}`;
     const subtitle = `$${opt.pricePerNight}/night | $${opt.totalPrice} total | ${opt.stars} stars`;
-    const imageUrl = `https://placehold.co/600x315/png?text=${encodeURIComponent(opt.hotelName)}`;
 
     return {
       title,
@@ -227,6 +233,26 @@ function buildOptionElements(options: HotelOptionCard[]): InstagramTemplateEleme
         {
           type: "postback",
           title: `Select`,
+          payload: `option:${optionIndex}:${opt.optionId}`,
+        },
+      ],
+    };
+  });
+}
+
+function buildFlightOptionElements(options: FlightOptionCard[]): InstagramTemplateElement[] {
+  return options.map((opt, idx) => {
+    const optionIndex = idx + 1;
+    const title = `${opt.airline} ${opt.flightNumber}`;
+    const subtitle = `${opt.origin} -> ${opt.destination} | ${opt.cabinClass} | $${opt.price}/person`;
+
+    return {
+      title,
+      subtitle,
+      buttons: [
+        {
+          type: "postback",
+          title: `Select option ${optionIndex}`,
           payload: `option:${optionIndex}:${opt.optionId}`,
         },
       ],
