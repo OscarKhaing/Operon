@@ -42,6 +42,8 @@ export interface BookingRequest {
   preferences: Preferences;
   status: BookingStatus;
   assignedTo: string; // operator name
+  channel?: "web" | "instagram";
+  instagramSenderId?: string;
   pdfUrl?: string; // URL to generated reservation PDF
   rejectedOptionIds?: string[]; // options rejected by hotels (no availability)
   createdAt: string;
