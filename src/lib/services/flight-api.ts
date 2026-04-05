@@ -66,14 +66,23 @@ export interface FlightFetchParams {
 }
 
 /**
+ * Strip parenthesized airport/station codes from location strings
+ * so regex queries don't break on special characters.
+ * e.g. "San Diego (SAN)" → "San Diego", "Tokyo (NRT)" → "Tokyo"
+ */
+function stripCode(location: string): string {
+  return location.replace(/\s*\([^)]*\)\s*$/, "").trim();
+}
+
+/**
  * Fetch flights from MongoDB via Express API, with optional filters.
  */
 export async function fetchFlights(params?: FlightFetchParams): Promise<FlightRecord[]> {
   try {
     const query = new URLSearchParams();
 
-    if (params?.origin) query.set("origin", params.origin);
-    if (params?.destination) query.set("destination", params.destination);
+    if (params?.origin) query.set("origin", stripCode(params.origin));
+    if (params?.destination) query.set("destination", stripCode(params.destination));
     if (params?.startDate) query.set("startDate", params.startDate);
     if (params?.maxPrice) query.set("maxPrice", String(params.maxPrice));
     if (params?.cabinClass) query.set("cabinClass", params.cabinClass);
