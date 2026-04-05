@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { usePathname } from "next/navigation";
 import Sidebar from "./Sidebar";
 
@@ -9,7 +10,8 @@ import Sidebar from "./Sidebar";
  */
 export default function LayoutShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const isCustomerPage = pathname.startsWith("/book");
+  const isCustomerPage = pathname === "/book";
+  const [collapsed, setCollapsed] = useState(false);
 
   if (isCustomerPage) {
     return <main className="min-h-screen">{children}</main>;
@@ -17,8 +19,13 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
 
   return (
     <>
-      <Sidebar />
-      <main className="ml-[240px] min-h-screen">{children}</main>
+      <Sidebar collapsed={collapsed} onToggle={() => setCollapsed(!collapsed)} />
+      <main
+        className="min-h-screen transition-all duration-300"
+        style={{ marginLeft: collapsed ? 64 : 240 }}
+      >
+        {children}
+      </main>
     </>
   );
 }
