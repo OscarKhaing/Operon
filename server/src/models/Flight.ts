@@ -11,7 +11,7 @@ export interface IFlight extends Document {
   startDate: Date;     // Departure Date
   endDate: Date;       // Return Date (if applicable)
   flightNumber: string;
-  cabinClass: 'Economy' | 'Business' | 'First';
+  cabinClass: 'Economy' | 'Premium Economy' | 'Business' | 'First';
 }
 
 const FlightSchema: Schema = new Schema({
@@ -25,7 +25,7 @@ const FlightSchema: Schema = new Schema({
   startDate: { type: Date, required: true },
   endDate: { type: Date, required: true },
   flightNumber: { type: String, required: true },
-  cabinClass: { type: String, enum: ['Economy', 'Business', 'First'], required: true }
+  cabinClass: { type: String, enum: ['Economy', 'Premium Economy', 'Business', 'First'], required: true }
 }, { timestamps: true });
 
 export default mongoose.model<IFlight>('Flight', FlightSchema);
