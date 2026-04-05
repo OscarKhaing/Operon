@@ -22,7 +22,7 @@ const PIPELINE_STAGES: { status: BookingStatus; icon: React.ElementType; color: 
   { status: "options_presented", icon: CalendarCheck, color: "bg-blue-50 text-blue-600" },
   { status: "extracting", icon: Clock, color: "bg-amber-50 text-amber-600" },
   // { status: "collecting_info", icon: ClipboardList, color: "bg-pink-50 text-pink-600" },
-  { status: "sent_to_hotel", icon: Send, color: "bg-orange-50 text-orange-600" },
+  { status: "awaiting_payment", icon: Send, color: "bg-orange-50 text-orange-600" },
   { status: "confirmed", icon: CheckCircle2, color: "bg-emerald-50 text-emerald-600" },
 ];
 
