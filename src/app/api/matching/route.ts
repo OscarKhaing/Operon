@@ -1,23 +1,28 @@
 import { NextResponse } from "next/server";
 import { store } from "@/lib/store";
 import { findOptions } from "@/lib/services/matching";
+import { validateMatchingPost } from "@/lib/validation";
 
 export async function POST(req: Request) {
-  const { bookingId } = await req.json();
+  const body = await req.json().catch(() => null);
+  const v = validateMatchingPost(body);
+  if (!v.ok) {
+    return NextResponse.json({ error: v.error }, { status: 400 });
+  }
 
-  const booking = store.getBooking(bookingId);
+  const booking = store.getBooking(v.data.bookingId);
   if (!booking) {
     return NextResponse.json({ error: "Booking not found" }, { status: 404 });
   }
 
   // Clear previous options before re-matching
-  store.clearOptions(bookingId);
+  store.clearOptions(v.data.bookingId);
 
-  const options = findOptions(booking);
+  const { options } = await findOptions(booking);
   store.addOptions(options);
 
   if (options.length > 0) {
-    store.updateBooking(bookingId, { status: "options_presented" });
+    store.updateBooking(v.data.bookingId, { status: "options_presented" });
   }
 
   return NextResponse.json({ options });

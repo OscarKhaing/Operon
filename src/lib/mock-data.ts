@@ -1,112 +1,10 @@
 import {
   BookingRequest,
-  HotelRecord,
   TemplateRecord,
   ChatMessage,
   BookingOption,
   BookingTransaction,
 } from "./types";
-
-// ===== Hotels =====
-
-export const MOCK_HOTELS: HotelRecord[] = [
-  {
-    id: "h1",
-    name: "Grand Marina Bay Hotel",
-    location: "Marina Bay, Singapore",
-    city: "Singapore",
-    stars: 5,
-    contactEmail: "reservations@grandmarinabay.com",
-    contactPhone: "+65-6888-1234",
-    roomTypes: [
-      { id: "h1-std", name: "Standard", basePrice: 180, currency: "USD", maxGuests: 2, amenities: ["WiFi", "Breakfast", "Pool"] },
-      { id: "h1-dlx", name: "Deluxe", basePrice: 280, currency: "USD", maxGuests: 3, amenities: ["WiFi", "Breakfast", "Pool", "Lounge", "City View"] },
-      { id: "h1-ste", name: "Suite", basePrice: 450, currency: "USD", maxGuests: 4, amenities: ["WiFi", "Breakfast", "Pool", "Lounge", "Bay View", "Butler Service"] },
-    ],
-    templateId: "t1",
-    tags: ["luxury", "business", "waterfront"],
-  },
-  {
-    id: "h2",
-    name: "Sakura Garden Inn",
-    location: "Shinjuku, Tokyo",
-    city: "Tokyo",
-    stars: 4,
-    contactEmail: "book@sakuragarden.jp",
-    contactPhone: "+81-3-5555-0102",
-    roomTypes: [
-      { id: "h2-std", name: "Standard", basePrice: 120, currency: "USD", maxGuests: 2, amenities: ["WiFi", "Green Tea Set"] },
-      { id: "h2-dlx", name: "Deluxe", basePrice: 200, currency: "USD", maxGuests: 2, amenities: ["WiFi", "Green Tea Set", "Onsen Access", "Garden View"] },
-      { id: "h2-ste", name: "Suite", basePrice: 350, currency: "USD", maxGuests: 3, amenities: ["WiFi", "Breakfast", "Onsen Access", "Garden View", "Tatami Room"] },
-    ],
-    templateId: "t2",
-    tags: ["traditional", "garden", "family"],
-  },
-  {
-    id: "h3",
-    name: "The Bund Palace",
-    location: "The Bund, Shanghai",
-    city: "Shanghai",
-    stars: 5,
-    contactEmail: "reservations@bundpalace.cn",
-    contactPhone: "+86-21-6333-8888",
-    roomTypes: [
-      { id: "h3-std", name: "Standard", basePrice: 150, currency: "USD", maxGuests: 2, amenities: ["WiFi", "Breakfast"] },
-      { id: "h3-dlx", name: "Deluxe River View", basePrice: 250, currency: "USD", maxGuests: 2, amenities: ["WiFi", "Breakfast", "River View", "Minibar"] },
-      { id: "h3-ste", name: "Presidential Suite", basePrice: 600, currency: "USD", maxGuests: 4, amenities: ["WiFi", "Breakfast", "River View", "Butler", "Spa"] },
-    ],
-    templateId: "t3",
-    tags: ["luxury", "waterfront", "business"],
-  },
-  {
-    id: "h4",
-    name: "Orchid Beach Resort",
-    location: "Patong, Phuket",
-    city: "Phuket",
-    stars: 4,
-    contactEmail: "stay@orchidbeach.th",
-    contactPhone: "+66-76-555-789",
-    roomTypes: [
-      { id: "h4-std", name: "Garden Room", basePrice: 85, currency: "USD", maxGuests: 2, amenities: ["WiFi", "Pool", "Garden View"] },
-      { id: "h4-dlx", name: "Ocean View", basePrice: 150, currency: "USD", maxGuests: 3, amenities: ["WiFi", "Pool", "Ocean View", "Balcony"] },
-      { id: "h4-ste", name: "Beachfront Villa", basePrice: 300, currency: "USD", maxGuests: 4, amenities: ["WiFi", "Private Pool", "Beach Access", "Butler"] },
-    ],
-    templateId: "t4",
-    tags: ["beach", "resort", "family", "honeymoon"],
-  },
-  {
-    id: "h5",
-    name: "Seoul Tower Hotel",
-    location: "Myeongdong, Seoul",
-    city: "Seoul",
-    stars: 4,
-    contactEmail: "book@seoultower.kr",
-    contactPhone: "+82-2-777-5500",
-    roomTypes: [
-      { id: "h5-std", name: "Standard", basePrice: 100, currency: "USD", maxGuests: 2, amenities: ["WiFi", "Breakfast"] },
-      { id: "h5-dlx", name: "Deluxe", basePrice: 170, currency: "USD", maxGuests: 2, amenities: ["WiFi", "Breakfast", "City View", "Minibar"] },
-      { id: "h5-ste", name: "Executive Suite", basePrice: 280, currency: "USD", maxGuests: 3, amenities: ["WiFi", "Breakfast", "City View", "Lounge", "Gym"] },
-    ],
-    templateId: "t5",
-    tags: ["city", "shopping", "business"],
-  },
-  {
-    id: "h6",
-    name: "Lotus Riverside Hotel",
-    location: "District 1, Ho Chi Minh City",
-    city: "Ho Chi Minh City",
-    stars: 3,
-    contactEmail: "info@lotusriverside.vn",
-    contactPhone: "+84-28-3822-1234",
-    roomTypes: [
-      { id: "h6-std", name: "Standard", basePrice: 55, currency: "USD", maxGuests: 2, amenities: ["WiFi", "Breakfast"] },
-      { id: "h6-dlx", name: "Superior", basePrice: 85, currency: "USD", maxGuests: 2, amenities: ["WiFi", "Breakfast", "River View", "Minibar"] },
-      { id: "h6-ste", name: "Suite", basePrice: 140, currency: "USD", maxGuests: 3, amenities: ["WiFi", "Breakfast", "River View", "Lounge", "Spa Credit"] },
-    ],
-    templateId: "t6",
-    tags: ["budget", "riverside", "city"],
-  },
-];
 
 // ===== Templates =====
 
@@ -255,13 +153,13 @@ export const MOCK_MESSAGES: ChatMessage[] = [
 export const MOCK_OPTIONS: BookingOption[] = [
   {
     id: "opt1", bookingId: "b2", hotelId: "h4", hotelName: "Orchid Beach Resort",
-    roomType: MOCK_HOTELS[3].roomTypes[0],
+    roomType: { id: "h4-std", name: "Garden Room", basePrice: 85, currency: "USD", maxGuests: 2, amenities: ["WiFi", "Pool", "Garden View"] },
     totalPrice: 255, nightCount: 3, score: 92,
     explanation: "Best value option within budget. Garden room with pool access at a beachfront resort.",
   },
   {
     id: "opt2", bookingId: "b2", hotelId: "h4", hotelName: "Orchid Beach Resort",
-    roomType: MOCK_HOTELS[3].roomTypes[1],
+    roomType: { id: "h4-dlx", name: "Ocean View", basePrice: 150, currency: "USD", maxGuests: 3, amenities: ["WiFi", "Pool", "Ocean View", "Balcony"] },
     totalPrice: 450, nightCount: 3, score: 78,
     explanation: "Ocean view upgrade. Slightly over budget but offers premium beach experience.",
   },

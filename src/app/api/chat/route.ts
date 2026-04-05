@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { store } from "@/lib/store";
 import { ChatMessage, MessageMetadata } from "@/lib/types";
 import { processMessage } from "@/lib/services/workflow";
+import { validateChatPost } from "@/lib/validation";
 import { v4 as uuid } from "uuid";
 
 export async function GET(req: Request) {
@@ -14,17 +15,12 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const body = await req.json();
-  const { bookingId, content, metadata, role } = body as {
-    bookingId: string;
-    content: string;
-    metadata?: MessageMetadata;
-    role?: "customer" | "agent";
-  };
-
-  if (!bookingId || !content) {
-    return NextResponse.json({ error: "bookingId and content required" }, { status: 400 });
+  const body = await req.json().catch(() => null);
+  const v = validateChatPost(body);
+  if (!v.ok) {
+    return NextResponse.json({ error: v.error }, { status: 400 });
   }
+  const { bookingId, content, metadata, role } = v.data;
 
   // ── Agent mode: operator types directly as agent, bypasses workflow ──
   if (role === "agent") {
@@ -53,7 +49,7 @@ export async function POST(req: Request) {
     role: "customer",
     content,
     timestamp: new Date().toISOString(),
-    metadata: metadata ?? undefined,
+    metadata: (metadata as MessageMetadata) ?? undefined,
   };
   store.addMessage(customerMsg);
 
@@ -61,7 +57,7 @@ export async function POST(req: Request) {
   // If metadata.type === "option_selected", this bypasses LLM entirely.
   let result: { content: string; metadata?: MessageMetadata };
   try {
-    result = await processMessage(bookingId, content, metadata);
+    result = await processMessage(bookingId, content, metadata as MessageMetadata);
   } catch (error) {
     console.error("Workflow error:", error);
     result = {
