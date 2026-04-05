@@ -7,6 +7,7 @@ import userRoutes from './routes/users.js';
 import bookingRoutes from './routes/bookings.js';
 import hotelRoutes from './routes/hotels.js';
 import flightRoutes from './routes/flights.js';
+import restaurantRoutes from './routes/restaurants.js'; 
 
 dotenv.config();
 
@@ -63,6 +64,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/bookings', bookingRoutes);
 app.use('/api/hotels', hotelRoutes);
 app.use('/api/flights', flightRoutes);
+app.use('/api/restaurants', restaurantRoutes);
 
 mongoose.connect(process.env.MONGO_URI!)
   .then(() => {
