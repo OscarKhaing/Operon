@@ -60,9 +60,21 @@ export async function POST(req: Request) {
     result = await processMessage(bookingId, content, metadata as MessageMetadata);
   } catch (error) {
     console.error("Workflow error:", error);
-    result = {
-      content: "I'm having a bit of trouble processing that right now. Could you try again in a moment?",
-    };
+
+    // Detect Gemini quota / out-of-credits errors and show a playful message
+    const errMsg = error instanceof Error ? error.message : String(error);
+    const isQuotaError = /429|quota|RESOURCE_EXHAUSTED|rate.?limit|exceeded|billing/i.test(errMsg);
+
+    if (isQuotaError) {
+      result = {
+        content:
+          "🧠💸 Our AI brain is out of credits! Operon was built on a hackathon budget and we've burned through Google Gemini's free tier. The chat will be back online once credits are refilled (or someone sends us a few bucks). Sorry for the awkward timing!",
+      };
+    } else {
+      result = {
+        content: "I'm having a bit of trouble processing that right now. Could you try again in a moment?",
+      };
+    }
   }
 
   // Save agent reply (with metadata if workflow returned it, e.g. hotel_options)

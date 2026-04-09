@@ -1,7 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { Plane, MessageSquare, Building2, UtensilsCrossed, ArrowRight, Zap, Globe, Shield, ChevronRight } from "lucide-react";
+import { Plane, MessageSquare, Building2, UtensilsCrossed, ArrowRight, Zap, Globe, Shield, ChevronRight, CheckCircle2, AlertTriangle, XCircle, Coins, Code2, BookOpen, PlayCircle } from "lucide-react";
+import ChatPreview, { ChatPreviewMessage } from "@/components/landing/ChatPreview";
+
+const HERO_SCRIPT: ChatPreviewMessage[] = [
+  { role: "customer", content: "I need a hotel and flight to London for August 14–20." },
+  { role: "agent", content: "Got it — 2 guests? Any budget in mind?" },
+  { role: "customer", content: "Yes, 2 people, around $300/night." },
+  { role: "agent", content: "Found 3 hotels matching your dates. Showing options now." },
+];
 
 export default function LandingPage() {
   return (
@@ -19,17 +27,34 @@ export default function LandingPage() {
             <span className="text-lg font-extrabold tracking-tight uppercase">Operon</span>
           </div>
           <div className="flex items-center gap-3">
+            <a
+              href="#how-we-built-it"
+              onClick={(e) => {
+                e.preventDefault();
+                document.getElementById("how-we-built-it")?.scrollIntoView({ behavior: "smooth", block: "start" });
+              }}
+              className="text-sm font-medium text-gray-500 hover:text-gray-900 transition-colors px-3 py-2 hidden md:block"
+            >
+              How we built it
+            </a>
             <Link
               href="/dashboard"
-              className="text-sm font-medium text-gray-500 hover:text-gray-900 transition-colors px-4 py-2"
+              className="text-sm font-medium text-gray-500 hover:text-gray-900 transition-colors px-3 py-2 hidden md:block"
             >
               Admin Panel
             </Link>
             <Link
               href="/book"
+              className="text-sm font-semibold text-gray-700 bg-white border border-gray-200 hover:border-gray-300 hover:bg-gray-50 px-4 py-2 rounded-lg transition-colors hidden sm:flex items-center gap-1.5"
+            >
+              Live Chat
+            </Link>
+            <Link
+              href="/demo"
               className="text-sm font-semibold text-white bg-[#0f172a] hover:bg-[#1e293b] px-5 py-2.5 rounded-lg transition-colors flex items-center gap-2"
             >
-              Try Demo <ArrowRight className="w-3.5 h-3.5" />
+              <PlayCircle className="w-3.5 h-3.5" />
+              Watch Demo
             </Link>
           </div>
         </div>
@@ -37,8 +62,8 @@ export default function LandingPage() {
 
       {/* Hero */}
       <section className="pt-32 pb-20 px-6">
-        <div className="max-w-6xl mx-auto">
-          <div className="max-w-3xl">
+        <div className="max-w-6xl mx-auto grid md:grid-cols-5 gap-12 items-center">
+          <div className="md:col-span-3">
             <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-sky-50 text-sky-700 rounded-full text-xs font-semibold mb-6 border border-sky-100">
               <Zap className="w-3 h-3" />
               AI-Powered Booking Operations
@@ -50,20 +75,24 @@ export default function LandingPage() {
             <p className="text-lg md:text-xl text-gray-500 leading-relaxed mb-10 max-w-xl font-medium">
               Operon is an AI travel agent that books hotels, flights, and restaurants through natural chat. No forms. No friction. Just tell it what you need.
             </p>
-            <div className="flex items-center gap-4">
+            <div className="flex flex-wrap items-center gap-4">
               <Link
-                href="/book"
+                href="/demo"
                 className="inline-flex items-center gap-2.5 px-7 py-3.5 bg-[#0f172a] text-white font-semibold rounded-xl hover:bg-[#1e293b] transition-all shadow-lg shadow-gray-900/10 text-sm"
               >
-                Start Booking <ArrowRight className="w-4 h-4" />
+                <PlayCircle className="w-4 h-4" />
+                Watch the Demo
               </Link>
               <Link
-                href="/dashboard"
+                href="/book"
                 className="inline-flex items-center gap-2 px-6 py-3.5 bg-white text-gray-700 font-semibold rounded-xl border border-gray-200 hover:border-gray-300 hover:bg-gray-50 transition-all text-sm"
               >
-                View Admin Dashboard
+                Try the Live Chat <ArrowRight className="w-4 h-4" />
               </Link>
             </div>
+          </div>
+          <div className="md:col-span-2">
+            <ChatPreview script={HERO_SCRIPT} loop />
           </div>
         </div>
       </section>
@@ -192,15 +221,174 @@ export default function LandingPage() {
       </section>
 
       {/* Tech Stack */}
-      <section className="py-16 px-6 bg-white border-t border-gray-100">
-        <div className="max-w-6xl mx-auto text-center">
-          <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-gray-400 mb-8">Built with</h2>
-          <div className="flex flex-wrap justify-center gap-4">
-            {["Next.js 16", "React 19", "TypeScript", "MongoDB", "Google Gemini", "Stripe", "Resend", "Tailwind CSS", "Express.js", "Instagram API"].map((tech) => (
-              <span key={tech} className="px-4 py-2 bg-gray-50 border border-gray-100 rounded-lg text-sm font-medium text-gray-600">
-                {tech}
-              </span>
+      <section className="py-20 px-6 bg-white border-t border-gray-100">
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center mb-14">
+            <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-gray-400 mb-3">Built with</h2>
+            <p className="text-3xl md:text-4xl font-extrabold tracking-tight">
+              A modern, production-grade stack
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-3 gap-5">
+            {[
+              {
+                label: "Frontend",
+                items: [
+                  { name: "Next.js 16", slug: "nextdotjs", color: "000000" },
+                  { name: "React 19", slug: "react", color: "61DAFB" },
+                  { name: "TypeScript", slug: "typescript", color: "3178C6" },
+                  { name: "Tailwind CSS", slug: "tailwindcss", color: "06B6D4" },
+                ],
+              },
+              {
+                label: "Backend & Data",
+                items: [
+                  { name: "Express.js", slug: "express", color: "000000" },
+                  { name: "MongoDB", slug: "mongodb", color: "47A248" },
+                  { name: "Mongoose", slug: "mongoose", color: "880000" },
+                  { name: "Node.js", slug: "nodedotjs", color: "5FA04E" },
+                ],
+              },
+              {
+                label: "AI & Integrations",
+                items: [
+                  { name: "Google Gemini", slug: "googlegemini", color: "8E75B2" },
+                  { name: "Stripe", slug: "stripe", color: "635BFF" },
+                  { name: "Resend", slug: "resend", color: "000000" },
+                  { name: "Instagram API", slug: "instagram", color: "E4405F" },
+                ],
+              },
+            ].map((group) => (
+              <div
+                key={group.label}
+                className="bg-gradient-to-br from-gray-50 to-white border border-gray-100 rounded-2xl p-6 hover:border-gray-200 hover:shadow-sm transition-all"
+              >
+                <h3 className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-5">
+                  {group.label}
+                </h3>
+                <div className="space-y-3">
+                  {group.items.map((item) => (
+                    <div key={item.name} className="flex items-center gap-3 group">
+                      <div className="w-10 h-10 rounded-lg bg-white border border-gray-100 flex items-center justify-center group-hover:border-gray-300 group-hover:shadow-sm transition-all flex-shrink-0">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={`https://cdn.simpleicons.org/${item.slug}/${item.color}`}
+                          alt={item.name}
+                          loading="lazy"
+                          className="w-5 h-5"
+                        />
+                      </div>
+                      <span className="text-sm font-semibold text-gray-700">{item.name}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
             ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Project Status — honest disclosure of what works, what's sandbox, what isn't integrated */}
+      <section id="how-we-built-it" className="py-20 px-6 bg-[#faf8f3] border-y border-amber-100 scroll-mt-20">
+        <div className="max-w-6xl mx-auto">
+          <div className="max-w-2xl mb-14">
+            <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-amber-700 mb-3">Project Status</h2>
+            <p className="text-3xl md:text-4xl font-extrabold tracking-tight mb-4">
+              Built for the hackathon.<br />
+              <span className="text-gray-500">Honest about its limits.</span>
+            </p>
+            <p className="text-gray-500 text-base font-medium leading-relaxed">
+              Operon was built in a hackathon with the resources available at the time. Some features are sandbox-only or use seed data instead of real provider APIs. Here&apos;s exactly what&apos;s running.
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-2 gap-5">
+            {/* Card 1: Fully functional */}
+            <div className="bg-white border border-emerald-200 rounded-2xl p-7">
+              <div className="flex items-center gap-2.5 mb-4">
+                <div className="w-9 h-9 rounded-lg bg-emerald-50 flex items-center justify-center">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                </div>
+                <h3 className="text-base font-bold text-emerald-900">Fully functional</h3>
+              </div>
+              <ul className="space-y-2 text-sm text-gray-600 leading-relaxed">
+                <li>• AI booking conversation flow (extraction, matching, options)</li>
+                <li>• Multi-category cross-population (hotel → flight → restaurant)</li>
+                <li>• Operator dashboard with real-time chat mirroring</li>
+                <li>• Confirmation emails sent via Resend (real inboxes)</li>
+                <li>• Trip summary cards</li>
+                <li>• MongoDB-backed inventory + bookings</li>
+              </ul>
+            </div>
+
+            {/* Card 2: Sandbox / Test mode */}
+            <div className="bg-white border border-amber-200 rounded-2xl p-7">
+              <div className="flex items-center gap-2.5 mb-4">
+                <div className="w-9 h-9 rounded-lg bg-amber-50 flex items-center justify-center">
+                  <AlertTriangle className="w-5 h-5 text-amber-600" />
+                </div>
+                <h3 className="text-base font-bold text-amber-900">Sandbox / Test mode</h3>
+              </div>
+              <ul className="space-y-2 text-sm text-gray-600 leading-relaxed">
+                <li><span className="font-semibold">Stripe</span> — test API keys; payments are simulated, no real charges</li>
+                <li><span className="font-semibold">Instagram DMs</span> — limited to whitelisted tester accounts via Meta Graph API (production access requires app review)</li>
+                <li><span className="font-semibold">MongoDB inventory</span> — manually seeded sample data for hotels, flights, restaurants</li>
+              </ul>
+            </div>
+
+            {/* Card 3: Not integrated */}
+            <div className="bg-white border border-rose-200 rounded-2xl p-7">
+              <div className="flex items-center gap-2.5 mb-4">
+                <div className="w-9 h-9 rounded-lg bg-rose-50 flex items-center justify-center">
+                  <XCircle className="w-5 h-5 text-rose-600" />
+                </div>
+                <h3 className="text-base font-bold text-rose-900">Not integrated</h3>
+              </div>
+              <p className="text-xs text-gray-500 mb-3">These require paid business partnerships not available during the hackathon:</p>
+              <ul className="space-y-2 text-sm text-gray-600 leading-relaxed">
+                <li><span className="font-semibold">Flight inventory</span> — Amadeus, Sabre, Travelport (GDS systems)</li>
+                <li><span className="font-semibold">Hotel inventory</span> — Booking.com, Expedia, Hotelbeds (partner APIs)</li>
+                <li><span className="font-semibold">Restaurant reservations</span> — OpenTable, Yelp Reservations, Resy</li>
+              </ul>
+            </div>
+
+            {/* Card 4: AI status */}
+            <div className="bg-white border border-violet-200 rounded-2xl p-7">
+              <div className="flex items-center gap-2.5 mb-4">
+                <div className="w-9 h-9 rounded-lg bg-violet-50 flex items-center justify-center">
+                  <Coins className="w-5 h-5 text-violet-600" />
+                </div>
+                <h3 className="text-base font-bold text-violet-900">AI status</h3>
+              </div>
+              <ul className="space-y-2 text-sm text-gray-600 leading-relaxed">
+                <li>Powered by Google Gemini, currently <span className="font-semibold">out of free-tier credits</span></li>
+                <li>Self-hosting Llama 3.2 3B on AWS Free Tier was evaluated and isn&apos;t feasible (the smallest free instance has 1 GB RAM; the model needs ~2 GB even at Q4 quantization)</li>
+                <li>The chat will resume working when credits are refilled or a paid tier is purchased</li>
+              </ul>
+            </div>
+          </div>
+
+          {/* Devpost + GitHub buttons */}
+          <div className="flex flex-wrap items-center justify-center gap-4 mt-12">
+            <a
+              href="https://devpost.com/software/1240049"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2.5 px-6 py-3 bg-[#0f172a] text-white font-semibold rounded-xl hover:bg-[#1e293b] transition-all shadow-md text-sm"
+            >
+              <BookOpen className="w-4 h-4" />
+              How we built it
+            </a>
+            <a
+              href="https://github.com/OscarKhaing/Operon"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2.5 px-6 py-3 bg-white text-gray-700 font-semibold rounded-xl border border-gray-200 hover:border-gray-300 hover:bg-gray-50 transition-all text-sm"
+            >
+              <Code2 className="w-4 h-4" />
+              GitHub
+            </a>
           </div>
         </div>
       </section>

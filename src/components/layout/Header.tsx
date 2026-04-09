@@ -1,6 +1,7 @@
 "use client";
 
-import { Bell, User } from "lucide-react";
+import Link from "next/link";
+import { Bell, User, ExternalLink } from "lucide-react";
 
 export default function Header({ title }: { title: string }) {
   return (
@@ -8,6 +9,14 @@ export default function Header({ title }: { title: string }) {
       <h1 className="text-lg font-semibold text-gray-900">{title}</h1>
 
       <div className="flex items-center gap-4">
+        <Link
+          href="/book"
+          target="_blank"
+          className="flex items-center gap-1.5 text-xs font-semibold text-sky-700 bg-sky-50 hover:bg-sky-100 border border-sky-100 px-3 py-1.5 rounded-lg transition-colors"
+        >
+          <ExternalLink className="w-3.5 h-3.5" />
+          Customer view
+        </Link>
         <button className="relative p-2 rounded-lg hover:bg-gray-100 transition-colors">
           <Bell className="w-4.5 h-4.5 text-gray-500" />
           <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full" />
